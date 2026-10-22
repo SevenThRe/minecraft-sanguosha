@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.sgs.validation.client.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ServerDisconnectMixin",
+    "VanillaMusicMixin",
+    "VanillaToastMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

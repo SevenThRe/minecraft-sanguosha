@@ -1,0 +1,80 @@
+// Source sharing follows the Balm 1.21.1 template's multiloader-loader convention.
+base.archivesName = "minecraft-sanguosha-${project.name}-${minecraft_version}"
+sourceSets.main.java.srcDir project(':common').file('src/main/java')
+sourceSets.main.resources.srcDir project(':common').file('src/main/resources')
+// Forge/NeoForge dev runs group the core output into the sgs mod's source sets.
+// A second runtime core jar would create duplicate JPMS package exports.
+configurations { giftDatabase }
+dependencies {
+    compileOnly project(':sgs-core')
+    implementation 'com.h2database:h2:2.3.232'
+    giftDatabase 'com.h2database:h2:2.3.232'
+}
+configurations { runtimeMods { transitive = false } }
+dependencies {
+    runtimeMods "net.blay09.mods:balm-${project.name}:${balm_version}"
+    if (project.name == 'fabric') runtimeMods "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+}
+tasks.register('prepareRuntimeMods', Copy) {
+    from configurations.runtimeMods
+    into layout.buildDirectory.dir('runtime-mods')
+}
+tasks.named('jar', Jar) {
+    from({ configurations.giftDatabase.collect { zipTree(it) } }) {
+        exclude 'META-INF/**', 'module-info.class'
+    }
+    dependsOn ':sgs-core:classes'
+    from project(':sgs-core').sourceSets.main.output
+    manifest { attributes 'Implementation-Version': project.version, 'Built-On-Minecraft': minecraft_version, 'MixinConfigs': 'sgs.client.mixins.json' }
+}
+processResources {
+    inputs.property 'version', project.version
+    filesMatching(['fabric.mod.json', 'META-INF/mods.toml', 'META-INF/neoforge.mods.toml']) {
+        expand version: project.version
+    }
+}
+
+// Export prepared development commands for two simultaneous JVMs without holding Gradle/Loom locks.
+// Generated absolute paths and development arguments remain under ignored build/.
+tasks.withType(JavaExec).configureEach { task ->
+    if (providers.gradleProperty('exportLaunch').isPresent() && task.name in ['runClient', 'runServer']) {
+        doFirst {
+            Map extraEnvironment = [:]
+            File runDirectory = task.workingDir
+            if (task.class.name.contains('net.fabricmc.loom')) {
+                runDirectory = project.file(task.internalRunDir.get())
+                extraEnvironment.putAll(task.internalEnvironmentVars.get())
+            } else if (task.hasProperty('runConfig')) {
+                // ForgeGradle applies its RunConfig inside exec(), after doFirst actions.
+                // Use its own token/argument helpers to resolve that same configuration.
+                def run = task.runConfig.get()
+                def generator = task.class.classLoader.loadClass('net.minecraftforge.gradle.common.util.runs.RunConfigGenerator')
+                def tokens = generator.configureTokensLazy(project, run,
+                        generator.mapModClassesToGradle(project, run), task.minecraftArtifacts, task.runtimeClasspathArtifacts)
+                runDirectory = project.file(run.workingDirectory)
+                task.args(generator.getArgsStream(run, tokens, false).toList())
+                run.jvmArgs.each { task.jvmArgs(run.replace(tokens, it)) }
+                if (run.isClient()) task.additionalClientArgs.get().each { task.jvmArgs(run.replace(tokens, it)) }
+                run.environment.each { key, value -> task.environment(key, run.replace(tokens, value)) }
+                run.properties.each { key, value -> task.systemProperty(key, run.replace(tokens, value)) }
+                run.allSources.each { task.classpath(it.runtimeClasspath) }
+            } else if (task.hasProperty('classpathProvider')) {
+                task.classpath(task.classpathProvider)
+                runDirectory = task.gameDirectory.get().asFile
+                extraEnvironment.putAll(task.environmentProperty.get())
+            }
+            extraEnvironment.putAll(task.environment.findAll { key, value -> key in ['MOD_CLASSES', 'MOD_RESOURCES'] })
+            File output = layout.buildDirectory.file("launch/${task.name}.json").get().asFile
+            output.parentFile.mkdirs()
+            output.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+                executable: task.javaLauncher.get().executablePath.asFile.absolutePath,
+                jvmArgs: task.allJvmArgs + task.jvmArguments.getOrElse([]) + task.jvmArgumentProviders.collectMany { it.asArguments().toList() },
+                classpath: task.classpath.asPath,
+                main: task.mainClass.get(), args: (task.args ?: []) + task.argumentProviders.collectMany { it.asArguments().toList() },
+                workingDir: runDirectory.absolutePath, environment: extraEnvironment
+            ]))
+            logger.lifecycle("Exported ${task.path} to ${output}")
+            throw new StopExecutionException('Export only; Java process launched by verification harness')
+        }
+    }
+}

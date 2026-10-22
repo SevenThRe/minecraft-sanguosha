@@ -1,0 +1,21 @@
+name: Build mod JARs
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  loaders:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        loader: [fabric, forge, neoforge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: bash validation/gradlew -p validation :${{ matrix.loader }}:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sgs-${{ matrix.loader }}-1.21.1
+          path: validation/${{ matrix.loader }}/build/libs/minecraft-sanguosha-${{ matrix.loader }}-1.21.1-0.1.0-tech.jar

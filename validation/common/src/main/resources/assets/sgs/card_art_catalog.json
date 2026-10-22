@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "content_scope": "current-cardtype-illustrations-v1-not-full-junzheng-deck",
+  "cards": [
+    {
+      "id": "sha",
+      "name": "杀",
+      "category": "基本",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/sha_v3.png"
+    },
+    {
+      "id": "shan",
+      "name": "闪",
+      "category": "基本",
+      "element": "响应",
+      "texture": "sgs:textures/gui/cards/shan_v3.png"
+    },
+    {
+      "id": "tao",
+      "name": "桃",
+      "category": "基本",
+      "element": "回复",
+      "texture": "sgs:textures/gui/cards/tao_v3.png"
+    },
+    {
+      "id": "jiu",
+      "name": "酒",
+      "category": "基本",
+      "element": "增益",
+      "texture": "sgs:textures/gui/cards/jiu_v4.png"
+    },
+    {
+      "id": "huosha",
+      "name": "火杀",
+      "category": "基本",
+      "element": "火",
+      "texture": "sgs:textures/gui/cards/huosha_v3.png"
+    },
+    {
+      "id": "leisha",
+      "name": "雷杀",
+      "category": "基本",
+      "element": "雷",
+      "texture": "sgs:textures/gui/cards/leisha_v3.png"
+    },
+    {
+      "id": "wuxie",
+      "name": "无懈可击",
+      "category": "锦囊",
+      "element": "抵消",
+      "texture": "sgs:textures/gui/cards/wuxie_v3.png"
+    },
+    {
+      "id": "zhuge_nu",
+      "name": "诸葛连弩",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/zhuge_nu_v3.png"
+    },
+    {
+      "id": "tiesuo",
+      "name": "铁索连环",
+      "category": "锦囊",
+      "element": "连环/重铸",
+      "texture": "sgs:textures/gui/cards/tiesuo_v1.png"
+    },
+    {
+      "id": "wuzhong",
+      "name": "无中生有",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/wuzhong_v1.png"
+    },
+    {
+      "id": "guohe",
+      "name": "过河拆桥",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/guohe_v1.png"
+    },
+    {
+      "id": "shunshou",
+      "name": "顺手牵羊",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/shunshou_v1.png"
+    },
+    {
+      "id": "juedou",
+      "name": "决斗",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/juedou_v1.png"
+    },
+    {
+      "id": "nanman",
+      "name": "南蛮入侵",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/nanman_v1.png"
+    },
+    {
+      "id": "wanjian",
+      "name": "万箭齐发",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/wanjian_v1.png"
+    },
+    {
+      "id": "taoyuan",
+      "name": "桃园结义",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/taoyuan_v1.png"
+    },
+    {
+      "id": "wugu",
+      "name": "五谷丰登",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/wugu_v1.png"
+    },
+    {
+      "id": "jiedao",
+      "name": "借刀杀人",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/jiedao_v1.png"
+    },
+    {
+      "id": "shandian",
+      "name": "闪电",
+      "category": "锦囊",
+      "element": "延时",
+      "texture": "sgs:textures/gui/cards/shandian_v1.png"
+    },
+    {
+      "id": "lebu",
+      "name": "乐不思蜀",
+      "category": "锦囊",
+      "element": "延时",
+      "texture": "sgs:textures/gui/cards/lebu_v1.png"
+    },
+    {
+      "id": "cixiong",
+      "name": "雌雄双股剑",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/cixiong_v1.png"
+    },
+    {
+      "id": "qinggang",
+      "name": "青釭剑",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/qinggang_v1.png"
+    },
+    {
+      "id": "hanbing",
+      "name": "寒冰剑",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/hanbing_v1.png"
+    },
+    {
+      "id": "qinglong",
+      "name": "青龙偃月刀",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/qinglong_v1.png"
+    },
+    {
+      "id": "zhangba",
+      "name": "丈八蛇矛",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/zhangba_v1.png"
+    },
+    {
+      "id": "guanshi",
+      "name": "贯石斧",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/guanshi_v1.png"
+    },
+    {
+      "id": "fangtian",
+      "name": "方天画戟",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/fangtian_v1.png"
+    },
+    {
+      "id": "qilin_gong",
+      "name": "麒麟弓",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/qilin_gong_v1.png"
+    },
+    {
+      "id": "bagua",
+      "name": "八卦阵",
+      "category": "装备",
+      "element": "防具",
+      "texture": "sgs:textures/gui/cards/bagua_v1.png"
+    },
+    {
+      "id": "renwang",
+      "name": "仁王盾",
+      "category": "装备",
+      "element": "防具",
+      "texture": "sgs:textures/gui/cards/renwang_v1.png"
+    },
+    {
+      "id": "jueying",
+      "name": "绝影",
+      "category": "装备",
+      "element": "+1坐骑",
+      "texture": "sgs:textures/gui/cards/jueying_v1.png"
+    },
+    {
+      "id": "dilu",
+      "name": "的卢",
+      "category": "装备",
+      "element": "+1坐骑",
+      "texture": "sgs:textures/gui/cards/dilu_v1.png"
+    },
+    {
+      "id": "zhuahuang",
+      "name": "爪黄飞电",
+      "category": "装备",
+      "element": "+1坐骑",
+      "texture": "sgs:textures/gui/cards/zhuahuang_v1.png"
+    },
+    {
+      "id": "chitu",
+      "name": "赤兔",
+      "category": "装备",
+      "element": "-1坐骑",
+      "texture": "sgs:textures/gui/cards/chitu_v1.png"
+    },
+    {
+      "id": "dawan",
+      "name": "大宛",
+      "category": "装备",
+      "element": "-1坐骑",
+      "texture": "sgs:textures/gui/cards/dawan_v1.png"
+    },
+    {
+      "id": "zixing",
+      "name": "紫骍",
+      "category": "装备",
+      "element": "-1坐骑",
+      "texture": "sgs:textures/gui/cards/zixing_v1.png"
+    },
+    {
+      "id": "guding",
+      "name": "古锭刀",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/guding_v1.png"
+    },
+    {
+      "id": "zhuque",
+      "name": "朱雀羽扇",
+      "category": "装备",
+      "element": "武器",
+      "texture": "sgs:textures/gui/cards/zhuque_v1.png"
+    },
+    {
+      "id": "tengjia",
+      "name": "藤甲",
+      "category": "装备",
+      "element": "防具",
+      "texture": "sgs:textures/gui/cards/tengjia_v1.png"
+    },
+    {
+      "id": "baiyin",
+      "name": "白银狮子",
+      "category": "装备",
+      "element": "防具",
+      "texture": "sgs:textures/gui/cards/baiyin_v1.png"
+    },
+    {
+      "id": "huogong",
+      "name": "火攻",
+      "category": "锦囊",
+      "element": "普通",
+      "texture": "sgs:textures/gui/cards/huogong_v1.png"
+    },
+    {
+      "id": "bingliang",
+      "name": "兵粮寸断",
+      "category": "锦囊",
+      "element": "延时",
+      "texture": "sgs:textures/gui/cards/bingliang_v1.png"
+    },
+    {
+      "id": "hualiu",
+      "name": "骅骝",
+      "category": "装备",
+      "element": "+1坐骑",
+      "texture": "sgs:textures/gui/cards/hualiu_v1.png"
+    }
+  ]
+}

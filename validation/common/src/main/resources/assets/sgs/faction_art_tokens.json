@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "id": "sgs-faction-art-v2",
+  "basis": "User-directed Wei blue / Shu red / Wu green / Qun gold and iron-white. Hex values are this project's tokens, not claimed official hex values.",
+  "factions": {
+    "WEI": {
+      "name": "魏",
+      "primary": "#315C91",
+      "highlight": "#7F9FBE",
+      "shadow": "#15283F",
+      "metal": "#C2CDD3",
+      "ink": "#203C60",
+      "prompt": "Cao Wei: unmistakable cobalt and indigo BLUE dominant clothing/armor (55-70% of costume), steel-silver fittings, pale cold-blue edges; deep navy shadows. No green or red dominant garment. Gold occupies less than 8% of costume."
+    },
+    "SHU": {
+      "name": "蜀",
+      "primary": "#A53632",
+      "highlight": "#DB6653",
+      "shadow": "#4D2027",
+      "metal": "#C9A976",
+      "ink": "#722E2B",
+      "prompt": "Shu Han: unmistakable cinnabar / crimson RED dominant clothing/armor (55-70% of costume), dark burgundy folds, small antique brass fittings and ivory undercloth. NOT green robes; no green main garment even for Zhuge Liang or Guan Yu. No blue or green dominant costume."
+    },
+    "WU": {
+      "name": "吴",
+      "primary": "#2D7759",
+      "highlight": "#75AA7D",
+      "shadow": "#133E33",
+      "metal": "#B9A879",
+      "ink": "#24523F",
+      "prompt": "Eastern Wu: unmistakable jade / forest GREEN dominant clothing/armor (55-70% of costume), deep teal-green shadows, pale celadon edges, restrained weathered bronze fittings. NOT red armor or crimson robes; no blue dominant garment. Do not turn the green into nearly black."
+    },
+    "QUN": {
+      "name": "群",
+      "primary": "#B69A58",
+      "highlight": "#EEE9D9",
+      "shadow": "#3B3D40",
+      "metal": "#D8D8CE",
+      "ink": "#756642",
+      "prompt": "Independent Qun heroes: IRON-WHITE and warm pale silver (45-60% of costume) with aged GOLD / champagne (20-30%) and charcoal (10-20%). The gold is material, not an orange sunset filter. No purple main robe, no red/green/blue dominant costume. Distinct brushed steel, ivory fabric, old gilding."
+    }
+  },
+  "shared": {
+    "paletteScope": "Costume and silhouette carry the faction. Skin, hair, weapon blades, environment remain natural. Background cannot substitute for costume color.",
+    "secondaryFactionBudget": "Other factions' saturated colors occupy at most 10% of visible costume; small gems, tassels and natural props only.",
+    "lighting": "Neutral readable key light; local effects allowed. No universal orange/gold sunset wash. Keep primary hue identifiable in a small card thumbnail.",
+    "style": "Original cinematic Minecraft voxel figures: cubic head, block hands, visibly block-built body and pixel-textured materials. Adult characters, dignified Chinese historical fantasy. No photorealistic human anatomy.",
+    "composition": "One vertical 5:7 hero illustration, no frame/UI/text/watermark. Face near horizontal center and 25-30% down for native upper portrait crop. Dynamic pose may move limbs, camera and props; keep face and identifying prop readable at small size.",
+    "poseRule": "Every hero has an authored distinct action, body axis, hand task, camera and scene. No shared front-facing standing three-quarter template with weapon vertical, scroll in one hand, gold palace behind. Military charge, braced defense, mounted action, seated strategy, kneeling aid, instrument playing and asymmetric movement must all occur. Two-person heroes need two distinct interacting silhouettes."
+  }
+}

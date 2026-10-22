@@ -1,0 +1,24 @@
+package dev.sgs.core.room;
+
+/** Rejection reasons for room and matchmaking operations. */
+public enum RoomError {
+  ROOM_NOT_FOUND,
+  ROOM_FULL,
+  ROOM_NOT_WAITING,
+  ALREADY_IN_ROOM,
+  NOT_IN_ROOM,
+  NOT_OWNER,
+  NOT_INVITED,
+  CANNOT_INVITE_SELF,
+  TARGET_IN_ROOM,
+  ALREADY_QUEUED,
+  NOT_QUEUED,
+  INVALID_SEAT,
+  SEAT_TAKEN,
+  CANNOT_KICK_OWNER,
+  MATCH_NOT_FOUND,
+  ROOM_NOT_FULL,
+  MEMBERS_NOT_READY,
+  WRONG_PASSWORD,
+  INVALID_SETTINGS
+}

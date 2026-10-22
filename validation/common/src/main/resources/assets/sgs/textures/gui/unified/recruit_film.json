@@ -1,0 +1,15 @@
+{
+  "frames": 16,
+  "fps": 6,
+  "columns": 2,
+  "rows": 2,
+  "width": 836,
+  "height": 470,
+  "interpolate": true,
+  "pages": [
+    "sgs:textures/gui/unified/recruit_film_page_00.png",
+    "sgs:textures/gui/unified/recruit_film_page_01.png",
+    "sgs:textures/gui/unified/recruit_film_page_02.png",
+    "sgs:textures/gui/unified/recruit_film_page_03.png"
+  ]
+}

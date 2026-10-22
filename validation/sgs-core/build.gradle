@@ -1,0 +1,11 @@
+plugins { id 'java-library' }
+repositories { mavenCentral() }
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release = 21 }
+// Share production rules with the loader modules.
+sourceSets {
+    main.java { srcDir '../../common/src/main/java'; include 'dev/sgs/core/**' }
+}
+dependencies {
+    implementation 'com.h2database:h2:2.3.232'
+}

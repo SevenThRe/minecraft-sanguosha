@@ -1,0 +1,32 @@
+plugins { id 'fabric-loom' }
+apply from: rootProject.file('loader.gradle')
+
+// Loom 1.9 can retain removed zip entries when writing over an existing output
+// (notably case-only resource renames on Windows). Remap into a fresh archive.
+tasks.named('remapJar') {
+    doFirst { project.delete(archiveFile.get().asFile) }
+}
+dependencies {
+    runtimeOnly project(':sgs-core')
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    modImplementation("net.blay09.mods:balm-fabric:${balm_version}") { transitive = false }
+}
+loom {
+    runs {
+        client {
+            client(); runDir 'runs/client'
+            if (providers.gradleProperty('clientSmoke').isPresent()) {
+                vmArg '-Dsgs.clientSmoke=true'
+                programArgs '--quickPlayMultiplayer', '127.0.0.1:25590'
+                if (providers.gradleProperty('artSmoke').isPresent()) vmArg '-Dsgs.artSmoke=true'
+            }
+        }
+        server {
+            server(); runDir 'runs/server'
+            vmArg "-Dsgs.smoke=${providers.gradleProperty('smokePhase').getOrElse('')}"
+        }
+    }
+}

@@ -1,0 +1,23 @@
+plugins {
+    id 'base'
+    id 'fabric-loom' version '1.9.2' apply false
+    id 'net.neoforged.moddev' version '0.1.110' apply false
+    id 'net.minecraftforge.gradle' version '6.0.36' apply false
+}
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'idea'
+    group = rootProject.group
+    version = rootProject.version
+    java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 21
+    }
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.twelveiterations.com/repository/maven-public/'; content { includeGroup 'net.blay09.mods' } }
+    }
+    tasks.withType(ProcessResources).configureEach { filteringCharset = 'UTF-8' }
+}
+tasks.named('build') { dependsOn ':common:build', ':fabric:build', ':forge:build', ':neoforge:build', 'check' }

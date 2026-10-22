@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "sgs:block/card_table"
+    }
+  }
+}

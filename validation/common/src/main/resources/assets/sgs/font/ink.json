@@ -1,0 +1,18 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "sgs:noto_sans_sc_medium.ttf",
+      "shift": [
+        0,
+        0
+      ],
+      "size": 10,
+      "oversample": 8
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:default"
+    }
+  ]
+}

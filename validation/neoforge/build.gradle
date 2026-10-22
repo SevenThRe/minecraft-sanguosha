@@ -1,0 +1,29 @@
+plugins { id 'net.neoforged.moddev' }
+apply from: rootProject.file('loader.gradle')
+neoForge {
+    version = neoforge_version
+    runs {
+        configureEach {
+            // ModDevGradle0.1.110 exposes this collector per run, not as a global configuration.
+            additionalRuntimeClasspath.add('com.h2database:h2:2.3.232')
+        }
+        client {
+            client()
+            gameDirectory = file('runs/client')
+            if (providers.gradleProperty('clientSmoke').isPresent()) {
+                systemProperty 'sgs.clientSmoke', 'true'
+                programArguments.addAll('--quickPlayMultiplayer', '127.0.0.1:25590')
+                if (providers.gradleProperty('artSmoke').isPresent()) systemProperty 'sgs.artSmoke', 'true'
+            }
+        }
+        server {
+            server(); programArgument '--nogui'
+            gameDirectory = file('runs/server')
+            systemProperty 'sgs.smoke', providers.gradleProperty('smokePhase').getOrElse('')
+        }
+    }
+    mods { sgs { sourceSet sourceSets.main; sourceSet project(':sgs-core').sourceSets.main } }
+}
+dependencies {
+    implementation("net.blay09.mods:balm-neoforge:${balm_version}") { transitive = false }
+}

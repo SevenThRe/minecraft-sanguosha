@@ -1,0 +1,7 @@
+plugins { id 'java-library' }
+group = 'org.sgs.packs'
+version = '1.0.0'
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release = 21 }
+dependencies { compileOnly files(providers.gradleProperty('sgsCoreJar').orElse('sdk/sgs-core.jar')) }
+tasks.named('jar') { archiveFileName = 'yjcm2011-hero-pack-1.0.0.jar' }

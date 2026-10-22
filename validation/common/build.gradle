@@ -1,0 +1,9 @@
+plugins { id 'net.neoforged.moddev' }
+neoForge { neoFormVersion = neoform_version }
+repositories { maven { url = 'https://repo.spongepowered.org/repository/maven-public/'; content { includeGroup 'org.spongepowered' } } }
+dependencies {
+    api project(':sgs-core')
+    compileOnly("net.blay09.mods:balm-common:${balm_version}") { transitive = false }
+    // Common sources contain client mixins; loader projects supply Mixin at runtime.
+    compileOnly('org.spongepowered:mixin:0.8.7') { transitive = false }
+}

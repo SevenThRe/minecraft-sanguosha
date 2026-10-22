@@ -1,0 +1,16 @@
+pluginManagement {
+    repositories {
+        exclusiveContent {
+            forRepository { maven { url = 'https://maven.fabricmc.net/' } }
+            filter { includeGroupAndSubgroups 'net.fabricmc'; includeGroup 'fabric-loom' }
+        }
+        exclusiveContent {
+            forRepository { maven { url = 'https://maven.minecraftforge.net/' } }
+            filter { includeGroupAndSubgroups 'net.minecraftforge' }
+        }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+rootProject.name = 'Minecraft-SanGuoSha-validation'
+include 'sgs-core', 'common', 'fabric', 'forge', 'neoforge'

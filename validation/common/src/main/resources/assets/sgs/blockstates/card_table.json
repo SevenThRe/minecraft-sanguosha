@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "sgs:block/card_table",
+      "y": 0
+    },
+    "facing=east": {
+      "model": "sgs:block/card_table",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "sgs:block/card_table",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "sgs:block/card_table",
+      "y": 270
+    }
+  }
+}
