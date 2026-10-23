@@ -6,7 +6,7 @@ on:
         description: Draft release containing the prepared JAR files and upload manifest
         required: true
 permissions:
-  contents: read
+  contents: write
 jobs:
   upload:
     runs-on: ubuntu-latest
