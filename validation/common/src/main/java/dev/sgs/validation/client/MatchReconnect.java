@@ -1,5 +1,6 @@
 package dev.sgs.validation.client;
 
+import static dev.sgs.validation.client.ClientText.tr;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.event.TickPhase;
 import net.blay09.mods.balm.api.event.TickType;
@@ -75,12 +76,12 @@ public final class MatchReconnect {
     }
     private static final class RetryScreen extends Screen {
         private final Component reason;
-        RetryScreen(Component reason){super(Component.literal("正在重连"));this.reason=reason;}
-        @Override protected void init(){addRenderableWidget(Button.builder(Component.literal("取消"),b->{cancel();minecraft.setScreen(new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new TitleScreen()));}).bounds(width/2-50,height/2+38,100,20).build());}
+        RetryScreen(Component reason){super(Component.literal(tr("sgs.ui.reconnecting_981c7a66")));this.reason=reason;}
+        @Override protected void init(){addRenderableWidget(Button.builder(Component.literal(tr("sgs.ui.cancel_4d0b4688")),b->{cancel();minecraft.setScreen(new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new TitleScreen()));}).bounds(width/2-50,height/2+38,100,20).build());}
         @Override public void onClose(){cancel();minecraft.setScreen(new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(new TitleScreen()));}
         @Override public void render(GuiGraphics g,int x,int y,float delta){
             super.render(g,x,y,delta);g.drawCenteredString(font,title,width/2,height/2-35,0xffffff);
-            g.drawCenteredString(font,"第 "+(schedule.attempts()+1)+" 次 · "+Math.max(0,(schedule.nextAt()-System.currentTimeMillis()+999)/1000)+" 秒",width/2,height/2-14,0xe4ca9f);
+            g.drawCenteredString(font,tr("sgs.ui.attempt_f495347d")+(schedule.attempts()+1)+tr("sgs.ui.empty_ee9a69e6")+Math.max(0,(schedule.nextAt()-System.currentTimeMillis()+999)/1000)+tr("sgs.ui.sec_d9ad5055"),width/2,height/2-14,0xe4ca9f);
             g.drawCenteredString(font,font.plainSubstrByWidth(reason.getString(),Math.max(20,width-24)),width/2,height/2+8,0xaaaaaa);
         }
     }

@@ -1,8 +1,0 @@
-{
-  "parent": "block/cube_bottom_top",
-  "textures": {
-    "top": "sgs:block/card_table_top",
-    "bottom": "sgs:block/card_table_bottom",
-    "side": "sgs:block/card_table_side"
-  }
-}

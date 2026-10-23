@@ -25,6 +25,7 @@ public final class MatchService {
     private final Map<Long,Long> roomMatchIds=new HashMap<>();
     private final Map<UUID,SpectatorConnection> observers=new HashMap<>();
     private volatile boolean closing;
+    private final Map<Long,dev.sgs.core.social.MatchChat> chats=new HashMap<>();
     public static void discardRestoredServer(MinecraftServer server){
         var service=SERVICES.remove(server);if(service==null)return;service.closing=true;
         new HashSet<>(service.roomSessions.values()).forEach(MatchSession::shutdown);
@@ -51,7 +52,7 @@ public final class MatchService {
                 if(service.closing)return;server.execute(()->{
                     if(service.closing)return;
                     for(var connection:connections)service.players.remove(connection.player,connection);
-                    service.roomSessions.remove(roomId);service.roomMatchIds.remove(roomId);
+                    service.roomSessions.remove(roomId);service.roomMatchIds.remove(roomId);service.chats.remove(matchId);
                     service.observers.entrySet().removeIf(e->e.getValue().roomId==roomId);
                     dev.sgs.validation.lobby.LobbyService.matchFinished(server,roomId);
                 });
@@ -59,6 +60,7 @@ public final class MatchService {
         session.setDisconnectGraceMillis(disconnectGraceMillis());
         for(var connection:connections){connection.session=session;service.players.put(connection.player,connection);}
         service.roomSessions.put(roomId,session);service.roomMatchIds.put(roomId,matchId);
+        service.chats.put(matchId,new dev.sgs.core.social.MatchChat(archive.room().seats().values(),archive.room().settings().allowChat()));
         ProbeMod.LOG.info("SGS_WORLD_MATCH_RESTORED room={} match={} humans={} pending={} content={}",roomId,matchId,connections.size(),saved.attack() || saved.trick() || saved.activeSkill() || saved.turnEnd() || saved.turnStart(),saved.contentId());
     }
     /** Decorates only already-authorized visible heroes, on the server thread. */
@@ -139,6 +141,7 @@ public final class MatchService {
         final AtomicLong connectionEpoch=new AtomicLong();
         net.minecraft.server.network.ServerGamePacketListenerImpl activeConnection;
         Object skinConnection;long skinRequest,skinChangedAt;
+        long chatHistoryAt;
         Connection(UUID player,long matchId,long roomId){this.player=player;this.matchId=matchId;this.roomId=roomId;}
         public void sendSnapshot(MatchSnapshot snapshot){
             if(closing)return;
@@ -150,10 +153,10 @@ public final class MatchService {
                     Balm.getNetworking().sendTo(online,new MatchNetwork.Snapshot(MatchNetwork.JSON.toJson(withSkins(view))));});
         }
         public void sendError(int nonce,String reason){if(closing)return;long epoch=connectionEpoch.get();
-
+            if(Boolean.getBoolean("sgs.reconnectSmoke"))ProbeMod.LOG.info("SGS_RECONNECT_ERROR_QUEUED nonce={} reason={} epoch={}",nonce,reason,epoch);
             server.execute(()->{if(closing)return;var online=server.getPlayerList().getPlayer(player);
             if(online!=null && online.connection==activeConnection && epoch==connectionEpoch.get()){
-
+                if(Boolean.getBoolean("sgs.reconnectSmoke"))ProbeMod.LOG.info("SGS_RECONNECT_ERROR_SENT nonce={} reason={} epoch={}",nonce,reason,epoch);
                 Balm.getNetworking().sendTo(online,new MatchNetwork.Error(reason));}});}
     }
     public static boolean startRoom(MinecraftServer server,dev.sgs.core.room.Room room){
@@ -166,8 +169,8 @@ public final class MatchService {
         }
         var humans=new ArrayList<MatchSession.Human>();var connections=new ArrayList<Connection>();
         // Build the complete rules before allocating a match or registering connections.
-        var base=MatchConfig.standard();
-        var checked=base.withRoomSettings(room.settings());
+        var base=dev.sgs.validation.survival.SurvivalService.policy(server).packs().apply(MatchConfig.standard().withBotDelay(dev.sgs.core.config.AiTimingConfig.load(server.getServerDirectory().resolve("config/sgs")).responseDelayMillis()));
+        var checked=base.withOpeningHandSelection(dev.sgs.validation.survival.SurvivalService.policy(server).openingHandEnabled()).withRoomSettings(room.settings());
         checked.validateHeroOffers(room.capacity());
         var ownedPools=dev.sgs.validation.collection.CollectionService.ownedPools(server,List.copyOf(room.members()),
             checked.heroPool().stream().map(dev.sgs.core.hero.HeroDefinition::id).toList(),room.capacity());
@@ -180,22 +183,46 @@ public final class MatchService {
         }
         // Ordinary-room acceptance must use the settings the host actually submitted.
         // The named legacy flag remains an alias; new probes use the common timing contract.
-        var config=checked;
-
-
-
-
-
-
+        boolean normalRoomTiming=Boolean.getBoolean("sgs.normalRoomSmoke") || Boolean.getBoolean("sgs.fangtianWorldRestart");
+        var config=Boolean.getBoolean("sgs.matchSmoke") && !normalRoomTiming?new MatchConfig(Boolean.getBoolean("sgs.reconnectSmoke")?120:Boolean.getBoolean("sgs.feedbackSmoke")?5:1,
+            Boolean.getBoolean("sgs.uiSmoke") || Boolean.getBoolean("sgs.reconnectSmoke")?120:Boolean.getBoolean("sgs.targetMarkersSmoke")?30:Boolean.getBoolean("sgs.feedbackSmoke")?8:3,
+            8,0,base.heroPool()).withContentPool(dev.sgs.core.match.ContentPool.JUNZHENG_160):checked;
+        if(Boolean.getBoolean("sgs.autoplaySmoke"))config=new MatchConfig(30,60,30,150,base.heroPool()).withContentPool(dev.sgs.core.match.ContentPool.JUNZHENG_160);
+        if(Boolean.getBoolean("sgs.sdkPackSmoke"))config=checked;
+        if(Boolean.getBoolean("sgs.addonSmoke"))config=new MatchConfig(config.responseTimeoutSeconds(),config.turnTimeoutSeconds(),config.selectionTimeoutSeconds(),config.botStepDelayMillis(),
+            dev.sgs.core.addon.AddonRuntime.current().heroes().stream().filter(h->h.id().equals("example:quartermaster") || h.id().equals("caocao") || h.id().equals("zhaoyun")).toList());
+        String wave=System.getProperty("sgs.standardWave","");
+        if(Boolean.getBoolean("sgs.matchSmoke") && !wave.isEmpty()){
+            var ids=switch(wave){case "sunquan-huatuo"->Set.of("sunquan","huatuo","zhaoyun");case "ganning-lumeng"->Set.of("ganning","lumeng","zhaoyun");case "zhouyu-guojia"->Set.of("zhouyu","guojia","zhaoyun");
+                case "daqiao-zhenji"->Set.of("daqiao","zhenji","zhaoyun");case "xuchu-sunshangxiang"->Set.of("xuchu","sunshangxiang","zhaoyun");
+                case "zhugeliang-diaochan"->Set.of("zhugeliang","diaochan","zhaoyun");case "zhangliao-xiahoudun"->Set.of("zhangliao","xiahoudun","zhaoyun");
+                default->throw new IllegalArgumentException("unknown standard wave");};
+            config=new MatchConfig(config.responseTimeoutSeconds(),config.turnTimeoutSeconds(),config.selectionTimeoutSeconds(),config.botStepDelayMillis(),
+                dev.sgs.core.addon.AddonRuntime.current().heroes().stream().filter(h->ids.contains(h.id())).toList());
+        }
+        if(Boolean.getBoolean("sgs.matchSmoke") && Boolean.getBoolean("sgs.productionPoolSmoke")){
+            if(!wave.isEmpty() || Boolean.getBoolean("sgs.addonSmoke"))throw new IllegalArgumentException("production verification cannot use a fixture hero pool");
+            config=new MatchConfig(config.responseTimeoutSeconds(),config.turnTimeoutSeconds(),config.selectionTimeoutSeconds(),config.botStepDelayMillis(),
+                dev.sgs.core.hero.StandardHeroes.CATALOG).withContentPool(dev.sgs.core.match.ContentPool.JUNZHENG_160);
+        }
+        if(Boolean.getBoolean("sgs.socialSkinSmoke")){
+            // Real distinct four-offer dealing with the full 25-hero action-art catalog.
+            config=new MatchConfig(config.responseTimeoutSeconds(),config.turnTimeoutSeconds(),config.selectionTimeoutSeconds(),config.botStepDelayMillis(),
+                dev.sgs.core.hero.StandardHeroes.CATALOG.stream().filter(h->dev.sgs.core.collection.CollectionSkins.ACTION_HEROES.contains(h.id())).toList())
+                .withContentPool(dev.sgs.core.match.ContentPool.JUNZHENG_160);
+        }
         var s=room.settings();
-        var applied=s;
-        config=config.withRoomSettings(applied).withHeroBans(true);
-        var random=new Random();
+        // Old smoke fixtures keep their short deadlines; room-flow acceptance uses normal timing.
+        var applied=Boolean.getBoolean("sgs.matchSmoke") && !normalRoomTiming?new dev.sgs.core.room.RoomSettings(s.password(),config.turnTimeoutSeconds(),config.responseTimeoutSeconds(),config.selectionTimeoutSeconds(),
+            s.allowChat(),s.allowSpectators(),s.doubleRenegade(),s.fixedSeats(),s.bannedHeroes()):s;
+        config=config.withRoomSettings(applied).withHeroBans(!Boolean.getBoolean("sgs.matchSmoke") || Boolean.getBoolean("sgs.heroBanSmoke"));
+        var random=Boolean.getBoolean("sgs.matchSmoke")?new Random(Long.getLong("sgs.matchSeed",42L)):
+            Boolean.getBoolean("sgs.worldRestartTrick")?new Random(Long.getLong("sgs.worldRestartSeed",43L)):new Random();
         var session=MatchSession.startWithSeats(id,humans,room.capacity(),config,SystemClock.INSTANCE,random,
             line->ProbeMod.LOG.info("[SGS_MATCH {}] {}",id,line),()->{if(service.closing)return;server.execute(()->{
                 if(service.closing)return;
                 for(var connection:connections)service.players.remove(connection.player,connection);
-                service.roomSessions.remove(room.id());service.roomMatchIds.remove(room.id());
+                service.roomSessions.remove(room.id());service.roomMatchIds.remove(room.id());service.chats.remove(id);
                 service.observers.entrySet().removeIf(e->e.getValue().roomId==room.id());
                 dev.sgs.validation.lobby.LobbyService.matchFinished(server,room.id());
                 ProbeMod.LOG.info("SGS_MATCH_CLOSED match={}",id);
@@ -203,6 +230,7 @@ public final class MatchService {
         session.setDisconnectGraceMillis(disconnectGraceMillis());
         for(var connection:connections){connection.session=session;service.players.put(connection.player,connection);}
         service.roomSessions.put(room.id(),session);service.roomMatchIds.put(room.id(),id);
+        service.chats.put(id,new dev.sgs.core.social.MatchChat(room.members(),room.settings().allowChat()));
         session.setTeammateSharing(room.teammateSharing());
         ProbeMod.LOG.info("SGS_ROOM_MATCH_STARTED match={} humans={} ai={} content={} turn={} response={} selection={} bans={} fixed={} double_renegade={}",
             id,humans.size(),room.aiSlots().size(),config.contentPool().id(),config.turnTimeoutSeconds(),config.responseTimeoutSeconds(),config.selectionTimeoutSeconds(),
@@ -213,6 +241,19 @@ public final class MatchService {
         var service=SERVICES.get(server);if(service==null)return;
         room.members().stream().map(service.players::get).filter(Objects::nonNull).map(c->c.session)
           .filter(Objects::nonNull).distinct().forEach(s->s.setTeammateSharing(room.teammateSharing()));
+    }
+    public static void queryTargets(ServerPlayer player,MatchNetwork.TargetQuery packet){
+        if(!player.getServer().isSameThread()){player.getServer().execute(()->queryTargets(player,packet));return;}
+        try{
+            var q=MatchNetwork.JSON.fromJson(packet.json(),MatchNetwork.TargetRequest.class);
+            var service=SERVICES.get(player.getServer());var c=service==null?null:service.players.get(player.getUUID());
+            if(q==null || c==null || c.session==null || c.latest==null || c.matchId!=q.match() || c.activeConnection!=player.connection
+                || q.epoch()!=c.latest.connectionEpoch() || q.revision()!=c.latest.revision() || q.skill()==null || q.skill().length()>64
+                || q.costs()==null || q.costs().size()>200 || q.costs().stream().anyMatch(Objects::isNull) || q.declared()< -1 || q.declared()>=CardType.values().length || q.primary()< -1 || q.primary()>7)return;
+            c.session.queryTargets(player.getUUID(),q.epoch(),q.skill(),q.costs(),q.declared(),q.primary(),targets->player.getServer().execute(()->{
+                if(c.activeConnection==player.connection)Balm.getNetworking().sendTo(player,new MatchNetwork.TargetResult(MatchNetwork.JSON.toJson(new MatchNetwork.TargetReply(q.request(),q.match(),q.revision(),targets))));
+            }));
+        }catch(RuntimeException ignored){}
     }
     public static void submit(ServerPlayer player,MatchNetwork.Intent packet){
         if(!player.getServer().isSameThread()){player.getServer().execute(()->submit(player,packet));return;}
@@ -234,7 +275,7 @@ public final class MatchService {
             if(c==null || c.matchId!=command.matchId() || c.latest==null || c.activeConnection!=player.connection)throw new IllegalArgumentException("not_in_match");
             // Peer progress can publish another selection/identity revision in transit.
             // Revalidate those phase-bound actions on the owning worker; all game input stays strict.
-            boolean heroChoice=action.kind()==MatchAction.Kind.SELECT_HERO && c.latest.snapshot().status()==0
+            boolean heroChoice=(action.kind()==MatchAction.Kind.SELECT_HERO || action.kind()==MatchAction.Kind.PREVIEW_HERO) && c.latest.snapshot().status()==0
                 && c.latest.snapshot().identityIntro()==null && c.latest.snapshot().heroBan()==null
                 && command.revision()>0 && command.revision()<=c.latest.revision();
             boolean identityChoice=(action.kind()==MatchAction.Kind.REVEAL_IDENTITY || action.kind()==MatchAction.Kind.CONFIRM_IDENTITY)
@@ -258,6 +299,31 @@ public final class MatchService {
             ProbeMod.LOG.info("SGS_MATCH_INTENT actor={} match={} kind={} nonce={}",player.getUUID(),c.matchId,action.kind(),action.nonce());
             if(action.kind()==MatchAction.Kind.LEAVE)service.players.remove(player.getUUID());
         }catch(RuntimeException error){Balm.getNetworking().sendTo(player,new MatchNetwork.Error("INVALID_INTENT"));}
+    }
+    /** Chat authority comes from this live connection, never from client-supplied names or seats. */
+    public static void chat(ServerPlayer player,MatchChatNetwork.Intent intent){
+        var server=player.getServer();if(!server.isSameThread()){server.execute(()->chat(player,intent));return;}
+        if(server.getPlayerList().getPlayer(player.getUUID())!=player)return;
+        var service=SERVICES.get(server);var c=service==null?null:service.players.get(player.getUUID());
+        var channel=service==null?null:service.chats.get(intent.match());
+        if(service==null||service.closing||c==null||c.activeConnection!=player.connection||c.latest==null
+            ||c.matchId!=intent.match()||c.connectionEpoch.get()!=intent.epoch()||channel==null){
+            MatchChatNetwork.send(player,new MatchChatNetwork.Update(intent.match(),intent.epoch(),intent.request(),false,"NOT_IN_MATCH",false,List.of()));return;
+        }
+        long now=System.currentTimeMillis();
+        if(intent.request()==0){
+            if(now-c.chatHistoryAt<700)return;c.chatHistoryAt=now;
+            MatchChatNetwork.send(player,new MatchChatNetwork.Update(c.matchId,intent.epoch(),0,true,"",channel.enabled(),channel.history()));return;
+        }
+        var reply=channel.send(player.getUUID(),intent.epoch(),intent.request(),c.latest.snapshot().viewerSeat(),player.getGameProfile().getName(),intent.text(),now);
+        var messages=reply.message()==null?List.<dev.sgs.core.social.MatchChat.Message>of():List.of(reply.message());
+        MatchChatNetwork.send(player,new MatchChatNetwork.Update(c.matchId,intent.epoch(),intent.request(),reply.accepted(),reply.reason(),channel.enabled(),messages));
+        if(reply.fresh())for(var other:service.players.values()){
+            if(other.matchId!=c.matchId||other.player.equals(c.player))continue;
+            var online=server.getPlayerList().getPlayer(other.player);
+            if(online!=null&&online.connection==other.activeConnection)
+                MatchChatNetwork.send(online,new MatchChatNetwork.Update(c.matchId,other.connectionEpoch.get(),-1,true,"",channel.enabled(),messages));
+        }
     }
     private static long disconnectGraceMillis(){return Math.max(0,Math.min(300_000,Long.getLong("sgs.disconnectGraceMillis",10_000L)));}
     public static void control(ServerPlayer player,MatchNetwork.ControlIntent intent){

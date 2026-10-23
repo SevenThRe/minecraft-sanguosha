@@ -21,6 +21,9 @@ public interface ActiveSkill {
   /** Read-only owner availability; empty means no additional restriction beyond normal phase checks. */
   default String unavailableReason(SkillEngine api) { return ""; }
 
+  /** Pure selection preview. Extensions must implement this before exposing selectable targets. */
+  default SkillResult preview(SkillEngine api,SgsPlayer actor,SgsPlayer target,List<CardInstance> cards){return SkillResult.reject("preview_unavailable");}
+
   SkillResult activate(
       SkillEngine api, SgsPlayer owner, SgsPlayer target, List<CardInstance> cards);
 }

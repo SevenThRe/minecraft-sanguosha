@@ -5,7 +5,7 @@ import java.util.Map;
 
 /** Presentation only: consume confirmed HP decreases, never predict damage from an attack. */
 public final class DamageFeedback {
-    public static final long DURATION = 1200;
+    public static final long DURATION = 650;
     public record Hit(int amount, long started) {}
     private final Map<Integer, Hit> hits = new HashMap<>();
 

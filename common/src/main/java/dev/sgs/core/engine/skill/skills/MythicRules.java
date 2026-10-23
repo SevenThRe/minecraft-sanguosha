@@ -151,7 +151,7 @@ public final class MythicRules implements PersistentSkillMemory {
     var a=card(from,id,from.handView(),true);var b=card(to,id,to.handView(),true);if(a==null||b==null)return false;
     g().cards().moveBatch(List.of(new CardMovement.Transfer(List.of(a),CardZone.hand(from.seat()),CardZone.PROCESSING,CardMove.Reason.REVEAL,from.seat(),true),
         new CardMovement.Transfer(List.of(b),CardZone.hand(to.seat()),CardZone.PROCESSING,CardMove.Reason.REVEAL,to.seat(),true)));
-    boolean won=a.rank().value()>b.rank().value();g().log("pindian {} seat {}:{} seat {}:{}",id,from.seat(),a.rank().value(),to.seat(),b.rank().value());
+    boolean won=a.rank().value()>b.rank().value();g().tableEffect("PINDIAN",from.seat(),to.seat(),id,List.of(a,b),won);g().log("pindian {} seat {}:{} seat {}:{}",id,from.seat(),a.rank().value(),to.seat(),b.rank().value());
     g().cards().finish(a,from.seat());g().cards().finish(b,to.seat());return won;
   }
   private void listen(SgsPlayer p,String id,Timing timing,Consumer<SkillContext> body){
@@ -179,11 +179,53 @@ public final class MythicRules implements PersistentSkillMemory {
       if(id.equals("luanwu")&&get(p,"limited_"+id)!=0)return "SKILL_ALREADY_SPENT";
       return "";
     }
+    public SkillResult preview(SkillEngine ignored,SgsPlayer actor,SgsPlayer target,List<CardInstance> cards){
+      if(actor!=p||!has(p,id)||!unavailableReason(api).isEmpty())return SkillResult.reject("skill_unavailable");
+      return previewSkill(p,id,target,cards);
+    }
     public SkillResult activate(SkillEngine ignored,SgsPlayer actor,SgsPlayer target,List<CardInstance> cards){
+      var check=preview(ignored,actor,target,cards);if(!check.accepted())return check;
       if(actor!=p||!has(p,id)||!unavailableReason(api).isEmpty())return SkillResult.reject("skill_unavailable");
       return activateSkill(p,id,target,cards);
     }
   };}
+  private SkillResult previewSkill(SgsPlayer p,String id,SgsPlayer t,List<CardInstance> cards){
+    boolean other=t!=null&&t!=p&&t.alive()&&g().players().contains(t);
+    switch(id){
+      case "huangtian_give"->{
+        var lord=lordWith(p,"huangtian");if(lord==null||t!=lord||cards.size()!=1||(cards.getFirst().type()!=CardType.SHAN&&cards.getFirst().type()!=CardType.SHANDIAN))return SkillResult.reject("huangtian_lord_and_card_required");
+      }
+      case "zhiba_pindian"->{
+        var lord=lordWith(p,"zhiba");if(lord==null||t!=lord||p.handCount()==0||lord.handCount()==0||!cards.isEmpty())return SkillResult.reject("zhiba_pindian_required");
+      }
+      case "quhu"->{
+        if(!other||t.hp()<=p.hp()||p.handCount()==0||t.handCount()==0||!cards.isEmpty())return SkillResult.reject("quhu_target");
+      }
+      case "tianyi"->{
+        if(!other||p.handCount()==0||t.handCount()==0||!cards.isEmpty())return SkillResult.reject("pindian_required");
+      }
+      case "luanji"->{
+        if(cards.size()!=2||cards.stream().anyMatch(c->!CardZone.hand(p.seat()).equals(g().cards().locate(c.instanceId())))||suit(p,cards.get(0))!=suit(p,cards.get(1)))return SkillResult.reject("same_suit_two_hand_cards");
+      }
+      case "luanwu"->{
+        if(!cards.isEmpty()||t!=null)return SkillResult.reject("no_cost_or_target");
+      }
+      case "tiaoxin"->{
+        if(!other||!g().inBasicAttackRange(t,p)||!cards.isEmpty())return SkillResult.reject("not_in_targets_range");
+      }
+      case "zhijian"->{
+        if(!other||cards.size()!=1||!cards.getFirst().type().isEquipment()||!CardZone.hand(p.seat()).equals(g().cards().locate(cards.getFirst().instanceId()))||t.equipment().all().stream().anyMatch(c->c.type().category()==cards.getFirst().type().category()))return SkillResult.reject("empty_equipment_slot_required");
+      }
+      case "jixi"->{
+        if(!other||!cards.isEmpty()||pile(p).isEmpty())return SkillResult.reject("field_required");
+        if(api instanceof SgsGameEngine e && pile(p).stream().noneMatch(c->e.mythicDeclarationLegal(p,new VirtualCard(CardType.SHUNSHOU,List.of(c)),t,null)))return SkillResult.reject("illegal_target");
+      }
+      case "dimeng"->{if(!other || living().stream().noneMatch(x->x!=p&&x!=t&&cards.size()==Math.abs(t.handCount()-x.handCount())))return SkillResult.reject("hand_difference_cost");}
+      case "guhuo"->{if(cards.size()!=1)return SkillResult.reject("one_hand_card_required");}
+      default->{return SkillResult.reject("unknown_skill");}
+    }
+    return SkillResult.ok();
+  }
   private SkillResult activateSkill(SgsPlayer p,String id,SgsPlayer t,List<CardInstance> cards){
     boolean other=t!=null&&t!=p&&t.alive()&&g().players().contains(t);
     switch(id){
@@ -214,7 +256,7 @@ public final class MythicRules implements PersistentSkillMemory {
       }
       case "dimeng"->{
         if(!other)return SkillResult.reject("other_target_required");
-        var second=target(p,id,living().stream().filter(x->x!=p&&x!=t).toList());if(second==null)return SkillResult.reject("second_target_required");
+        var second=target(p,id,living().stream().filter(x->x!=p&&x!=t&&cards.size()==Math.abs(t.handCount()-x.handCount())).toList());if(second==null)return SkillResult.reject("second_target_required");
         if(cards.size()!=Math.abs(t.handCount()-second.handCount()))return SkillResult.reject("hand_difference_cost");
         put(p,"used_"+id,g().turnNumber());api.discardCards(p,cards);
         if(t.alive()&&second.alive())g().cards().moveBatch(List.of(new CardMovement.Transfer(t.handView(),CardZone.hand(t.seat()),CardZone.hand(second.seat()),CardMove.Reason.SKILL_GIVE,p.seat(),false),new CardMovement.Transfer(second.handView(),CardZone.hand(second.seat()),CardZone.hand(t.seat()),CardMove.Reason.SKILL_GIVE,p.seat(),false)));
@@ -241,7 +283,9 @@ public final class MythicRules implements PersistentSkillMemory {
       }
       case "jixi"->{
         if(!other||!cards.isEmpty()||pile(p).isEmpty())return SkillResult.reject("field_required");
-        var cost=card(p,id,pile(p),false);if(cost==null)return SkillResult.reject("field_required");
+        if(api instanceof SgsGameEngine e && pile(p).stream().noneMatch(c->e.mythicDeclarationLegal(p,new VirtualCard(CardType.SHUNSHOU,List.of(c)),t,null)))return SkillResult.reject("illegal_target");
+        var eligible=pile(p).stream().filter(c->!(api instanceof SgsGameEngine e)||e.mythicDeclarationLegal(p,new VirtualCard(CardType.SHUNSHOU,List.of(c)),t,null)).toList();
+        var cost=card(p,id,eligible,false);if(cost==null)return SkillResult.reject("field_required");
         if(!api.useVirtualCard(p,new VirtualCard(CardType.SHUNSHOU,List.of(cost)),t,null))return SkillResult.reject("illegal_target");
       }
       case "guhuo"->{return guhuo(p,t,cards);}
@@ -290,7 +334,7 @@ public final class MythicRules implements PersistentSkillMemory {
         if(selected.isEmpty())return;var replacement=choices.stream().filter(x->x.instanceId()==selected.get().cardId()).findFirst().orElse(null);if(replacement==null)return;
         c.exchangeJudgment(p,replacement);c.confirmPublicActivation();
       });
-      case "leiji"->listen(p,id,Timing.CARD_RESPONSE_COMMITTED,c->{if(c.actor()==p&&c.card()!=null&&c.card().type()==CardType.SHAN){
+      case "leiji"->listen(p,id,Timing.CARD_RESPONSE_COMMITTED,c->{if(c.actor()==p&&c.card()!=null&&c.card().type()==CardType.SHAN&&invoke(p,id,p)){
         var t=target(p,id,living());if(t==null)return;var judge=api.judgeForSkill(t,id,false);
         if(judge!=null&&suit(t,judge)==Suit.SPADE)api.dealElementalSkillDamage(p,t,2,DamageNature.THUNDER);c.confirmPublicActivation();
       }});
@@ -298,7 +342,8 @@ public final class MythicRules implements PersistentSkillMemory {
       case "guhuo"->{}
       case "quhu"->{}
       case "jieming"->listen(p,id,Timing.DAMAGE_TAKE_AFTER,c->{if(c.target()==p)for(int i=0;i<c.damage()&&p.alive();i++){
-        var t=target(p,id,living());if(t==null)break;api.drawCards(t,Math.max(0,Math.min(t.maxHp(),5)-t.handCount()));c.confirmPublicActivation();
+        if(!invoke(p,id,p))continue;
+        var t=target(p,id,living());if(t==null)continue;api.drawCards(t,Math.max(0,Math.min(t.maxHp(),5)-t.handCount()));c.confirmPublicActivation();
       }});
       case "bazhen"->{}
       case "huoji","kanpo","lianhuan","jiuchi"->listen(p,id,Timing.CARD_TRANSFORM,c->{
@@ -355,7 +400,7 @@ public final class MythicRules implements PersistentSkillMemory {
           for(var card:owned(c.target()))move(card,CardZone.hand(p.seat()),CardMove.Reason.EFFECT_GAIN,p);c.confirmPublicActivation();
         }
       });
-      case "fangzhu"->listen(p,id,Timing.DAMAGE_TAKE_AFTER,c->{if(c.target()==p){
+      case "fangzhu"->listen(p,id,Timing.DAMAGE_TAKE_AFTER,c->{if(c.target()==p&&invoke(p,id,p)){
         var t=target(p,id,living().stream().filter(x->x!=p).toList());if(t!=null){api.drawCards(t,p.maxHp()-p.hp());api.turnOver(t);c.confirmPublicActivation();}
       }});
       case "songwei"->listen(p,id,Timing.JUDGE_CARD_EFFECT,c->{
@@ -522,6 +567,7 @@ public final class MythicRules implements PersistentSkillMemory {
   private void zhiba(SgsPlayer challenger,SgsPlayer lord){
     var a=card(challenger,"zhiba",challenger.handView(),true);var b=card(lord,"zhiba",lord.handView(),true);if(a==null||b==null)return;
     g().cards().moveBatch(List.of(new CardMovement.Transfer(List.of(a),CardZone.hand(challenger.seat()),CardZone.PROCESSING,CardMove.Reason.REVEAL,challenger.seat(),true),new CardMovement.Transfer(List.of(b),CardZone.hand(lord.seat()),CardZone.PROCESSING,CardMove.Reason.REVEAL,lord.seat(),true)));
+    g().tableEffect("PINDIAN",challenger.seat(),lord.seat(),"zhiba",List.of(a,b),a.rank().value()>b.rank().value());
     try{if(a.rank().value()<=b.rank().value()&&invoke(lord,"zhiba_gain",challenger)){
       if(CardZone.PROCESSING.equals(g().cards().locate(a.instanceId())))move(a,CardZone.hand(lord.seat()),CardMove.Reason.EFFECT_GAIN,lord);
       if(CardZone.PROCESSING.equals(g().cards().locate(b.instanceId())))move(b,CardZone.hand(lord.seat()),CardMove.Reason.EFFECT_GAIN,lord);
@@ -558,7 +604,13 @@ public final class MythicRules implements PersistentSkillMemory {
     int selected=labeledOption(p,"guhuo_declare",GUHUO_TYPES.stream().map(t->t.name()).toList(),0);var declared=GUHUO_TYPES.get(selected);
     if(Set.of(CardType.WUZHONG,CardType.NANMAN,CardType.WANJIAN,CardType.TAOYUAN,CardType.WUGU,CardType.TAO,CardType.JIU).contains(declared))target=null;
     SgsPlayer secondary=null;
-    if(declared==CardType.JIEDAO||declared==CardType.TIESUO){var first=target;secondary=target(p,"guhuo_second",living().stream().filter(x->x!=first).toList());}
+    boolean needsTarget=!Set.of(CardType.WUZHONG,CardType.NANMAN,CardType.WANJIAN,CardType.TAOYUAN,CardType.WUGU,CardType.TAO,CardType.JIU).contains(declared);
+    if(needsTarget && api instanceof SgsGameEngine e){
+      var virtual=new VirtualCard(declared,costs);
+      var eligible=living().stream().filter(first->declared==CardType.JIEDAO?living().stream().anyMatch(second->e.mythicDeclarationLegal(p,virtual,first,second)):e.mythicDeclarationLegal(p,virtual,first,null)).toList();
+      if(target==null)target=target(p,"guhuo_target",eligible);if(target==null || !eligible.contains(target))return SkillResult.reject("target_required");
+      if(declared==CardType.JIEDAO || declared==CardType.TIESUO){var first=target;secondary=target(p,"guhuo_second",living().stream().filter(second->second!=first&&e.mythicDeclarationLegal(p,virtual,first,second)).toList());if(declared==CardType.JIEDAO && secondary==null)return SkillResult.reject("second_target_required");}
+    }
     if(api instanceof SgsGameEngine e&&!e.mythicDeclarationLegal(p,new VirtualCard(declared,costs),target,secondary))return SkillResult.reject("illegal_declaration_target");
     var cost=costs.getFirst();boolean succeeds=bluff(p,cost,declared);
     try{if(succeeds&&p.alive()&&g().status()==GameStatus.RUNNING)api.useVirtualCard(p,new VirtualCard(declared,List.of(cost)),target,secondary);}

@@ -11,8 +11,12 @@ public final class CardMotionRenderer {
     public interface Face {void draw(CardView card,int x,int y,float scale);}
     public record Frame(long sequence,String reason,boolean faceUp,float progress){}
     public static Frame draw(GuiGraphics g,CardMotionTimeline timeline,long now,Anchors anchors,Face face){
+        return draw(g,timeline,now,anchors,face,event->true);
+    }
+    public static Frame draw(GuiGraphics g,CardMotionTimeline timeline,long now,Anchors anchors,Face face,java.util.function.Predicate<CardMotionView> include){
         Frame captured=null;
         for(var flight:timeline.visible(now)){
+            if(!include.test(flight.event()))continue;
             var from=anchors.at(flight,false);var to=anchors.at(flight,true);
             float t=flight.eased(now),p=flight.progress(now);
             int w=Math.max(1,Math.round(from.width()+(to.width()-from.width())*t));

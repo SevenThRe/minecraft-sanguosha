@@ -25,7 +25,8 @@ public final class MatchMailbox {
   }
   public static Envelope envelope(UUID id,MatchAction action,long epoch,long version){return new Envelope(id,action,epoch,version);}
   /** Transport lifecycle controls are not client actions and cannot be forged via MatchAction. */
-  public sealed interface Control permits Connectivity, Spectator, Rejection, TeamSharing, SaveCheckpoint, AutoControl {}
+  public sealed interface Control permits Connectivity, Spectator, Rejection, TeamSharing, SaveCheckpoint, AutoControl, TargetQuery {}
+  public record TargetQuery(UUID playerId,long epoch,String skill,java.util.List<Long> costs,int declared,int primary,java.util.function.Consumer<java.util.Map<Integer,String>> reply) implements Control {}
   public record AutoControl(UUID playerId,boolean enabled,long epoch,long version,int nonce) implements Control {}
   public record SaveCheckpoint(java.util.concurrent.CompletableFuture<dev.sgs.core.persistence.MatchCheckpoint> result,boolean pause) implements Control {}
   public record TeamSharing(boolean enabled) implements Control {}

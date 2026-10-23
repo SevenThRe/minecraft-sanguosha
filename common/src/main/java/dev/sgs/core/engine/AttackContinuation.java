@@ -194,6 +194,7 @@ public final class AttackContinuation {
               var paid=useCost.snapshot();engine.continuationCompleteQinglong(source,target,state.players().get(paid.actor()),used,paid.reason()==CardMove.Reason.RESPONSE);
               useCost=null;followQinglong(used);break;
             }
+            engine.recordTargetedUse(source,used,targets.stream().map(i->state.players().get(i)).toList());
             state.registerShaPlayed();engine.continuationCardUseCommitted(source,used);baseDamage=state.consumeJiuBoost()?2:1;
             if(targets.size()>1){state.publishSkillActivation(sourceSeat,"fangtian");state.log("seat {} fangtian targets {}",sourceSeat,targets);}
             useCost=null;step=AttackStep.TARGET_REDIRECT;
@@ -205,6 +206,7 @@ public final class AttackContinuation {
           settleRedirect(engine);
         }
         case TARGET_RULES->{
+          state.journal().add(state.journal().seat(sourceSeat)+"对"+state.journal().seat(targetSeat)+"结算"+dev.sgs.core.game.MatchJournal.type(effectiveType));
           dodgeProhibited=false;
           if(!target.alive() || state.status()!=dev.sgs.core.GameStatus.RUNNING)step=AttackStep.CLEANUP;
           else{formatVersion=Math.max(13,formatVersion);ruleQuery=new IntRuleContinuation(dev.sgs.core.engine.skill.RuleId.SHA_DODGE_COUNT,1);settleRule(engine);}
@@ -454,7 +456,7 @@ public final class AttackContinuation {
       case AFTER_APPLIED->{
         damages.pop();
         if(frame.nature.elemental() && frame.wasChained && state.status()==dev.sgs.core.GameStatus.RUNNING){
-          state.setChained(frame.target,false);
+          engine.continuationReleaseChain(frame.target);
           if(!frame.chain){var ring=state.alivePlayersFromCurrent();for(int i=ring.size()-1;i>=0;i--)
             damages.push(new DamageFrame(ring.get(i).seat(),frame.amount,frame.nature,true));}
         }

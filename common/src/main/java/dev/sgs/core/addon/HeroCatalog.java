@@ -94,13 +94,13 @@ public final class HeroCatalog {
       builtin("luoyi","裸衣","摸牌阶段可少摸一张牌；本回合由你以杀或决斗造成的伤害增加1点。",TRIGGERED,NONE,0,0,false);
       builtin("jieyin","结姻","出牌阶段限一次，弃置两张手牌并选择一名受伤的其他男性角色，你与其各回复1点体力。",ACTIVE,OTHER,2,2,false);
       builtin("xiaoji","枭姬","一次失去装备区里的牌后，你可以摸两张牌；同一次失去多张也只发动一次。",TRIGGERED,NONE,0,0,false);
-      builtin("tuxi","突袭","摸牌阶段可放弃摸牌，依次选择至多两名不同其他角色，各随机获得其一张手牌。",TRIGGERED,NONE,0,0,false);
+      builtin("tuxi","突袭","摸牌阶段可选择至多两名有手牌的不同其他角色，各随机获得其一张手牌，少选的名额照常摸牌。",TRIGGERED,NONE,0,0,false);
       builtin("guanxing","观星","准备阶段可观看牌堆顶至多五张牌（不超过存活角色数），依选择顺序分别放到牌堆顶或底；未选择的牌按原序放回顶。",TRIGGERED,NONE,0,0,false);
       builtin("kongcheng","空城","锁定技，没有手牌时不能成为杀或决斗的目标；已确定目标后失去最后手牌不取消该牌。",PASSIVE,NONE,0,0,false);
       builtin("qingguo","倾国","可以将一张黑色手牌当闪使用或打出；装备区牌不适用。",TOGGLE,ANY,1,1,false);
       builtin("luoshen","洛神","准备阶段可反复判定，黑色则取得最终判定牌，红色或自行停止时结束。",TRIGGERED,NONE,0,0,false);
       builtin("ganglie","刚烈","每次受到伤害存活后可判定，非红桃时伤害来源弃置两张手牌或受到你造成的1点伤害。",TRIGGERED,NONE,0,0,false);
-      builtin("lijian","离间","出牌阶段限一次，弃一张手牌或装备并选择两名其他男性，令第二名对第一名使用不可无懈的决斗（第一名先打杀）。",ACTIVE,OTHER,1,1,false,true);
+      builtin("lijian","离间","出牌阶段限一次，弃一张手牌或装备并选择两名其他男性，令第一名对第二名使用不可无懈的决斗（第二名先打杀）。",ACTIVE,OTHER,1,1,false,true);
       builtin("biyue","闭月","结束阶段可以摸一张牌；在弃牌阶段之后结算。",TRIGGERED,NONE,0,0,false);
       builtin("mashu","马术","锁定技，计算与其他角色的距离时减少1，最低为1。",PASSIVE,NONE,0,0,false);
       builtin("tieji","铁骑","使用杀指定目标后可判定，红色则此杀不能被闪避；不忽略被动防具。",TRIGGERED,NONE,0,0,false);

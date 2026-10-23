@@ -123,7 +123,8 @@ public final class ActiveSkillContinuation {
         }
         case COST->{
           payment.advance(e);if(!payment.done())return;payment=null;
-          duel=DuelExchange.start(selectedSource,plan.primaryTarget());step=Step.DUEL;
+          e.recordTargetedUse(e.state().players().get(plan.primaryTarget()),card(),java.util.List.of(e.state().players().get(selectedSource)));
+          duel=DuelExchange.start(plan.primaryTarget(),selectedSource);step=Step.DUEL;
         }
         case DUEL->{
           var actor=e.state().players().get(duel.responder());var other=e.state().players().get(duel.other());
@@ -164,7 +165,7 @@ public final class ActiveSkillContinuation {
       var skill=e.plannedSkill(plan);
       if(!plan.allows(choice.get())||!skill.stillPrepared(e,plan))return false;
       var source=e.state().players().get(choice.get().targetSeat());var target=e.state().players().get(plan.primaryTarget());
-      if(!e.canSkillDuel(source,target))return false;
+      if(!e.canSkillDuel(target,source))return false;
       var costs=plan.ownedCosts(e).orElseThrow();
       skill.commitUse(e,plan);accepted=true;selectedSource=source.seat();
       payment=new DiscardCostContinuation(plan.actor(),costs);selection=null;step=Step.COST;revision++;return true;

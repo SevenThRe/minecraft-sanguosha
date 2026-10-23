@@ -2,10 +2,39 @@ plugins { id 'java-library' }
 repositories { mavenCentral() }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release = 21 }
-// Share production rules with the loader modules.
+// Reuse existing rule sources and tests in place; no second implementation.
 sourceSets {
     main.java { srcDir '../../common/src/main/java'; include 'dev/sgs/core/**' }
+    test.java { srcDir '../../common/src/test/java'; include 'dev/sgs/core/**' }
+    test.resources.srcDir '../../common/src/test/resources'
 }
 dependencies {
     implementation 'com.h2database:h2:2.3.232'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+test {
+    useJUnitPlatform()
+    systemProperty 'sgs.coreTestClasspath',sourceSets.test.runtimeClasspath.asPath
+}
+
+// Isolate evidence when another local task runs its own targeted tests in this shared checkout.
+if(providers.gradleProperty('sgsVerificationTag').isPresent()) {
+    def verificationTag=providers.gradleProperty('sgsVerificationTag').get()
+    if(!(verificationTag ==~ /[a-z0-9-]{1,48}/))throw new GradleException('Invalid sgsVerificationTag')
+    tasks.named('test',Test) {
+        reports.junitXml.outputLocation=layout.buildDirectory.dir("test-results/${verificationTag}")
+        reports.html.outputLocation=layout.buildDirectory.dir("reports/tests/${verificationTag}")
+        binaryResultsDirectory=layout.buildDirectory.dir("test-results/${verificationTag}/binary")
+    }
+}
+
+tasks.register('simulate', JavaExec) {
+    group = 'verification'
+    description = 'Runs a pure-Java AI match with the explicitly labelled dev-119 migration deck.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.sgs.core.sim.HeadlessSimCli'
+    args((project.findProperty('players') ?: '6').toString(),
+         (project.findProperty('seed') ?: '42').toString(),
+         (project.findProperty('maxTicks') ?: '20000').toString())
 }

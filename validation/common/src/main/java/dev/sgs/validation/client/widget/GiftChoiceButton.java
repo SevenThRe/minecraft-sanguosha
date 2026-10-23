@@ -1,4 +1,6 @@
 package dev.sgs.validation.client.widget;
+
+import static dev.sgs.validation.client.ClientText.tr;
 import dev.sgs.core.social.GiftDefinition;
 import dev.sgs.validation.client.GiftSprites;
 import net.minecraft.client.gui.GuiGraphics;
@@ -8,8 +10,8 @@ import net.minecraft.network.chat.Component;
 public final class GiftChoiceButton extends SgsButton {
     private final GiftDefinition gift;private final boolean selected;
     public GiftChoiceButton(int x,int y,int size,GiftDefinition gift,boolean selected,boolean enabled,OnPress action){
-        super(x,y,size,size,Component.literal(gift.name()),action);this.gift=gift;this.selected=selected;active=enabled;
-        setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(gift.name()+" · "+gift.cost()+"鲜花"+(GiftSprites.available(gift)?"":" · 缺少客户端素材"))));
+        super(x,y,size,size,Component.literal(dev.sgs.validation.client.ClientText.named("sgs.gift."+gift.id(),gift.name())),action);this.gift=gift;this.selected=selected;active=enabled;
+        setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(dev.sgs.validation.client.ClientText.named("sgs.gift."+gift.id(),gift.name())+" · "+gift.cost()+tr("sgs.ui.flowers_cb4633ff")+(GiftSprites.available(gift)?"":tr("sgs.ui.client_artwork_missing_f65a394f")))));
     }
     @Override protected boolean parchment(){return false;}
     @Override protected void renderWidget(GuiGraphics g,int mx,int my,float partial){

@@ -6,6 +6,9 @@ import java.util.function.*;
 public final class CounterspellWindow {
   public enum Receipt { INVALID, DECLINED, SCOPE_PASSED, WON, CLOSED, LATE }
   private final long id,deadline;private final int subject,depth;
+  private CardType effectType;
+  public CounterspellWindow withEffect(CardType type){checkOwner();effectType=type;return this;}
+  public CardType effectType(){return effectType;}
   private final List<PromptRequest> requests;
   private final Map<UUID,PromptRequest> pending=new LinkedHashMap<>();
   private final Set<UUID> scopePasses=new HashSet<>();

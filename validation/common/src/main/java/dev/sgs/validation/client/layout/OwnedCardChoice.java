@@ -9,7 +9,7 @@ public record OwnedCardChoice(List<Long> cards, List<Integer> targets) {
     public static OwnedCardChoice from(PromptType type,List<Long> offered,List<Long> owned,
                                        boolean hidden,List<Integer> targets) {
         if(!EnumSet.of(PromptType.GUI_CAI_REPLACE,PromptType.GANGLIE_DISCARD,
-            PromptType.WEAPON_DISCARD,PromptType.LIULI_TARGET,PromptType.YIJI_GIVE).contains(type)
+            PromptType.WEAPON_DISCARD,PromptType.LIULI_TARGET,PromptType.YIJI_GIVE,PromptType.EXPANSION_CHOICE).contains(type)
             || hidden || offered.isEmpty() || offered.stream().anyMatch(id->id<=0)
             || new HashSet<>(offered).size()!=offered.size() || !owned.containsAll(offered))return null;
         return new OwnedCardChoice(offered,targets);

@@ -25,7 +25,9 @@ import net.minecraft.world.entity.player.PlayerModelPart;
 public final class PlayerSkinRenderer {
     private static final int LIMIT=128;
     private static final Map<UUID,PreviewPlayer> MODELS=new LinkedHashMap<>();
+    private static final Map<UUID,PlayerSkin> FIXTURES=new LinkedHashMap<>();
     private static ClientLevel modelLevel;
+    private static final ResourceLocation TEST_UV=ProbeMod.id("textures/gui/lobby/test_skin_uv64.png");
     private PlayerSkinRenderer(){}
     private record Resolved(GameProfile profile,PlayerSkin skin,boolean fixture,String source){}
 
@@ -38,6 +40,7 @@ public final class PlayerSkinRenderer {
         var entity=mc.level==null?null:mc.level.getPlayerByUUID(id);
         var live=entity instanceof net.minecraft.client.player.AbstractClientPlayer player?player:null;
         GameProfile profile=live!=null?live.getGameProfile():info!=null?info.getProfile():mc.player!=null && id.equals(mc.player.getUUID())?mc.player.getGameProfile():null;
+        if(FIXTURES.containsKey(id))return new Resolved(profile==null?new GameProfile(id,"TEST_UV64"):profile,FIXTURES.get(id),true,"TEST_UV64");
         if(profile==null)return null;
         PlayerSkin skin=live!=null?live.getSkin():info!=null?info.getSkin():mc.player.getSkin();
         boolean fallback=DefaultPlayerSkin.get(id).texture().equals(skin.texture());
@@ -48,7 +51,7 @@ public final class PlayerSkinRenderer {
         g.fill(x-1,y-1,x+size+1,y+size+1,0xffb99358);
         if(resolved==null){g.fill(x,y,x+size,y+size,0xff524b3b);g.drawCenteredString(font,"玩家",x+size/2,y+size/2-4,0xffe9c584);return;}
         PlayerFaceRenderer.draw(g,resolved.skin().texture(),x,y,size);
-
+        if(resolved.fixture())g.drawString(font,"TEST",x,y+size-8,0xffff72dc,false);
     }
     /** Draw a complete vanilla model; coordinates use the caller's GUI pose transform. */
     public static void portrait(GuiGraphics g,Font font,String uuid,int x,int y,int width,int height){
@@ -71,7 +74,10 @@ public final class PlayerSkinRenderer {
         g.flush();
         InventoryScreen.renderEntityInInventoryFollowsMouse(g,x,y,x+width,y+height,modelScale,0f,
             x+width*.5f-10f,y+height*.5f,player);
-        if(resolved.source().equals("minecraft-default")){
+        if(resolved.fixture()){
+            g.fill(x,y+height-11,x+width,y+height,0xdf351732);
+            g.drawCenteredString(font,"TEST UV64 · "+modelName(resolved.skin()),x+width/2,y+height-9,0xffff92e1);
+        }else if(resolved.source().equals("minecraft-default")){
             g.fill(x,y+height-11,x+width,y+height,0xc32c251d);
             g.drawCenteredString(font,"MC 默认皮肤",x+width/2,y+height-9,0xffcfb989);
         }
@@ -86,7 +92,11 @@ public final class PlayerSkinRenderer {
     }
     /** Explicit test-only override, never installed automatically or sent to another player. */
     public static void installUvFixture(UUID player,boolean slim){
+        if(FIXTURES.size()>=LIMIT)FIXTURES.remove(FIXTURES.keySet().iterator().next());
+        FIXTURES.put(player,new PlayerSkin(TEST_UV,"TEST_UV64",null,null,slim?PlayerSkin.Model.SLIM:PlayerSkin.Model.WIDE,false));
     }
+    public static void clearUvFixture(UUID player){FIXTURES.remove(player);MODELS.remove(player);}
+    public static void clearUvFixtures(){FIXTURES.clear();clearPreviewCache();}
     public static void clearPreviewCache(){MODELS.clear();modelLevel=null;}
     /** Source metadata is not proof of custom-skin runtime acceptance; screenshots remain required. */
     public static String describe(String uuid){

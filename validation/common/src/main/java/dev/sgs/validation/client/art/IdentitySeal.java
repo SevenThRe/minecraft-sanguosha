@@ -9,7 +9,7 @@ public final class IdentitySeal {
     private IdentitySeal() {}
 
     public static String name(String label) {
-        return switch(label) {
+        return dev.sgs.validation.client.ClientText.category(switch(label) {
             case "主" -> "主公";
             case "忠" -> "忠臣";
             case "反" -> "反贼";
@@ -17,7 +17,7 @@ public final class IdentitySeal {
             case "友" -> "友方";
             case "敌" -> "敌方";
             default -> label;
-        };
+        });
     }
 
     public static int ink(String label) {
@@ -57,6 +57,10 @@ public final class IdentitySeal {
             g.fill(left+w-edge-eye,top+edge,left+w-edge,top+edge+eye,0xffead8ae);
         } else {
             String full=name(label);
+            if(dev.sgs.validation.client.ClientText.english()){
+                String english=switch(label){case "主"->"Lord";case "忠"->"Loyal";case "反"->"Rebel";case "内"->"Renegade";case "我"->"You";case "友"->"Ally";case "敌"->"Enemy";default->label;};
+                InkText.fitted(g,font,english,x+size/2f,y+size*.30f,size*.80f,size*.35f,ink(label));
+            } else
             // Compact portrait/menu seals use one large glyph; identity cards retain both.
             if(fullName && full.length()==2) {
                 InkText.fitted(g,font,full.substring(0,1),x+size/2f,y+size*.14f,size*.58f,size*.34f,ink(label));

@@ -82,12 +82,14 @@ public final class BotTurnDriver {
         return;
       }
     }
-    for (CardType type : List.of(CardType.WUZHONG,CardType.TAOYUAN,CardType.WUGU,CardType.NANMAN,CardType.WANJIAN)) {
+    for (CardType type : List.of(CardType.ZHULU,CardType.WUZHONG,CardType.TAOYUAN,CardType.WUGU,CardType.NANMAN,CardType.WANJIAN)) {
       if (hasType(player,type)) {
         accept(cards.play(firstId(player,type),null,null,null));
         return;
       }
     }
+    if(hasType(player,CardType.JIEJIA))for(var target:state.alivePlayersAfter(player.seat()))
+      if(!state.areTeammates(player,target) && !target.equipment().all().isEmpty() && cards.play(firstId(player,CardType.JIEJIA),null,target,null).accepted())return;
     if (hasType(player,CardType.JUEDOU)) {
       var targets=state.alivePlayersAfter(player.seat()).stream().filter(p->!state.areTeammates(player,p)).toList();
       // Public range/team preference is not a legality check (for example Kongcheng).

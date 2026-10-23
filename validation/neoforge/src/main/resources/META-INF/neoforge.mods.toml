@@ -4,8 +4,8 @@ license="All Rights Reserved"
 [[mods]]
 modId="sgs"
 version="${version}"
-displayName="Minecraft-SanGuoSha Technical Validation"
-description='''Shared table, networking and persistent-room validation.'''
+displayName="Minecraft-SanGuoSha"
+description='''在 Minecraft 中游玩三国杀：房间联机、身份模式与 2v2。社区公开测试版。'''
 [[dependencies.sgs]]
 modId="neoforge"
 type="required"

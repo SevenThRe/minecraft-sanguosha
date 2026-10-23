@@ -1,0 +1,7 @@
+Minecraft SanGuoSha - Minecraft 1.21.1
+Requires JDK 21.
+Windows: validation\gradlew.bat -p validation :fabric:build :forge:build :neoforge:build
+Linux/macOS: bash validation/gradlew -p validation :fabric:build :forge:build :neoforge:build
+Install exactly one loader-specific JAR with Balm for the same loader. Fabric also requires Fabric API.
+Artifacts: validation/<loader>/build/libs/
+Enabled card packs: Standard, EX, Junzheng. Zhulu is unavailable and cannot be enabled.

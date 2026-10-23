@@ -11,7 +11,9 @@ import net.minecraft.server.packs.resources.ResourceManager;
 
 /** Presentation data only; card rules and physical-card identities stay in sgs-core. */
 public final class CardArtCatalog {
-    public record Art(String id, String name, String category, String element, ResourceLocation texture) {}
+    public record Art(String id, String name, String category, String element, ResourceLocation texture) {
+        @Override public String name() { return dev.sgs.validation.client.ClientText.named("sgs.card."+id,name); }
+    }
 
     public static List<Art> load(ResourceManager resources) {
         try (Reader reader = resources.getResourceOrThrow(ProbeMod.id("card_art_catalog.json")).openAsReader()) {

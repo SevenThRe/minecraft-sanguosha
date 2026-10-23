@@ -20,12 +20,12 @@ public final class MatchNetwork {
         public View(long matchId,long revision,MatchSnapshot snapshot,int nonceFloor,long connectionEpoch){this(matchId,revision,snapshot,nonceFloor,connectionEpoch,matchId);}
     }
     public record Command(long matchId,long revision,String kind,int nonce,long promptId,boolean accept,
-        long cardId,int declaredType,int target,int secondary,String skill,List<Long> cards,String hero,List<Integer> targets,long controlVersion) {
+        long cardId,int declaredType,int target,int secondary,String skill,List<Long> cards,String hero,List<Integer> targets,long controlVersion,dev.sgs.core.engine.SkillChoice.DeckOrder deckOrder) {
         public MatchAction action() {return MatchAction.of(MatchAction.Kind.valueOf(kind),nonce,promptId,accept,
-            cardId,declaredType,target,secondary,skill,cards==null?List.of():cards,hero,targets==null?List.of():targets);}
+            cardId,declaredType,target,secondary,skill,cards==null?List.of():cards,hero,targets==null?List.of():targets,deckOrder);}
         public static Command of(View view,MatchAction action) {return new Command(view.matchId,view.revision,
             action.kind().name(),action.nonce(),action.promptId(),action.accept(),action.cardId(),action.declaredTypeOrdinal(),
-            action.targetSeat(),action.secondarySeat(),action.skillId(),action.cardIds(),action.heroId(),action.targetSeats(),view.snapshot().seats().stream().filter(seat->seat.self()).findFirst().map(seat->seat.control().version()).orElse(0L));}
+            action.targetSeat(),action.secondarySeat(),action.skillId(),action.cardIds(),action.heroId(),action.targetSeats(),view.snapshot().seats().stream().filter(seat->seat.self()).findFirst().map(seat->seat.control().version()).orElse(0L),action.deckOrder());}
     }
     public static Consumer<View> receiver=ignored->{};
     public static Consumer<String> errorReceiver=ignored->{};
@@ -56,7 +56,22 @@ public final class MatchNetwork {
         public static final StreamCodec<RegistryFriendlyByteBuf,Error> CODEC=StreamCodec.of((b,p)->b.writeUtf(p.reason,256),b->new Error(b.readUtf(256)));
         public Type<Error> type(){return TYPE;}
     }
+    public record TargetRequest(long request,long match,long revision,long epoch,String skill,List<Long> costs,int declared,int primary) {}
+    public record TargetReply(long request,long match,long revision,java.util.Map<Integer,String> targets) {}
+    public static Consumer<TargetReply> targetReceiver=ignored->{};
+    public record TargetQuery(String json) implements CustomPacketPayload {
+        public static final Type<TargetQuery> TYPE=new Type<>(ProbeMod.id("target_query"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,TargetQuery> CODEC=StreamCodec.of((b,p)->b.writeUtf(p.json,8000),b->new TargetQuery(b.readUtf(8000)));
+        public Type<TargetQuery> type(){return TYPE;}
+    }
+    public record TargetResult(String json) implements CustomPacketPayload {
+        public static final Type<TargetResult> TYPE=new Type<>(ProbeMod.id("target_result"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,TargetResult> CODEC=StreamCodec.of((b,p)->b.writeUtf(p.json,8000),b->new TargetResult(b.readUtf(8000)));
+        public Type<TargetResult> type(){return TYPE;}
+    }
     public static void initialize() {
+        Balm.getNetworking().registerServerboundPacket(TargetQuery.TYPE,TargetQuery.class,TargetQuery.CODEC,MatchService::queryTargets);
+        Balm.getNetworking().registerClientboundPacket(TargetResult.TYPE,TargetResult.class,TargetResult.CODEC,(p,r)->targetReceiver.accept(JSON.fromJson(r.json(),TargetReply.class)));
         Balm.getNetworking().registerServerboundPacket(ControlIntent.TYPE,ControlIntent.class,ControlIntent.CODEC,MatchService::control);
         Balm.getNetworking().registerServerboundPacket(Intent.TYPE,Intent.class,Intent.CODEC,MatchService::submit);
         Balm.getNetworking().registerClientboundPacket(ResumeStatus.TYPE,ResumeStatus.class,ResumeStatus.CODEC,(p,s)->resumeReceiver.accept(s.available()));

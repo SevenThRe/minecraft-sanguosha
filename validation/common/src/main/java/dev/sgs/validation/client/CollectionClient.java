@@ -26,7 +26,8 @@ public final class CollectionClient {
     static boolean pending(){return pending!=0;}
     static void send(String action,String hero){if(pending!=0 && !action.equals("refresh"))return;pending=++request;
         long price=state==null?-1:state.heroes().stream().filter(h->h.id().equals(hero)).mapToLong(CollectionNetwork.Hero::price).findFirst().orElse(-1);
+        if(state!=null && (action.equals("draw")||action.equals("draw10")))price=Math.multiplyExact(state.drawTokenCost(),action.equals("draw10")?10:1);
         Balm.getNetworking().sendToServer(new CollectionNetwork.Intent(pending,action,hero,price));}
     public static boolean ownsSkin(String hero,String skin){return skin.equals("classic") || state!=null && (!state.enabled() || state.skins().contains(hero+"/"+skin));}
-
+    static void smokeStalePurchase(String hero){pending=++request;Balm.getNetworking().sendToServer(new CollectionNetwork.Intent(pending,"buy",hero,1));}
 }

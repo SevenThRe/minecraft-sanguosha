@@ -107,7 +107,7 @@ public record TrickCheckpoint(int version,StateCheckpoint state,long promptSeque
         int actor=c.step()==TrickContinuation.Step.PRIMARY_COMMIT?c.source():c.counters().isEmpty()?-1:c.counters().getLast().seat();
         if(actor!=p.asker())throw new IllegalArgumentException("trick hook actor mismatch");
       }else if(p.type()==PromptType.WUGU_PICK){
-        if(family==null || c.effectiveType()!=CardType.WUGU || c.step()!=TrickContinuation.Step.CHOICE || p.asker()!=c.target() || p.subject()!=c.source() || !p.choices().equals(family.harvest()) || p.choices().isEmpty() || p.hidden() || !p.skill().isEmpty() || !c.counters().isEmpty() || c.depth()%2!=0)throw new IllegalArgumentException("invalid harvest choice");
+        if(family==null || (c.effectiveType()!=CardType.WUGU&&c.effectiveType()!=CardType.ZHULU) || c.step()!=TrickContinuation.Step.CHOICE || p.asker()!=c.target() || p.subject()!=c.source() || !p.choices().equals(family.harvest()) || p.choices().isEmpty() || p.hidden() || !p.skill().equals(c.effectiveType()==CardType.ZHULU?"zhulu":"") || !c.counters().isEmpty() || c.depth()%2!=0)throw new IllegalArgumentException("invalid harvest choice");
       }else if(p.type()==PromptType.CARD_ZONE_SELECT){
         if(c.step()!=TrickContinuation.Step.CHOICE || !c.counters().isEmpty() || c.depth()%2!=0 || !Set.of(CardType.GUOHE,CardType.SHUNSHOU).contains(c.effectiveType()) || p.asker()!=c.source() || p.subject()!=c.target()
             || !p.skill().equals(c.effectiveType()==CardType.GUOHE?"guohe":"shunshou"))throw new IllegalArgumentException("invalid trick zone request");
@@ -139,8 +139,8 @@ public record TrickCheckpoint(int version,StateCheckpoint state,long promptSeque
       if(version<3 || f.damage()==null || f.response()!=null || c.pending()==null || y.owner()!=f.damage().damageFrames().getFirst().targetSeat() || y.amount()<1 || y.amount()!=f.damage().damageFrames().getFirst().amount() || y.point()<0 || y.point()>=y.amount() || !Set.of(YiJiContinuation.Step.INVOKE,YiJiContinuation.Step.GIVE).contains(y.step()) || y.retained().size()>2 || new HashSet<>(y.retained()).size()!=y.retained().size() || y.retained().stream().anyMatch(id->id<1) || (y.step()==YiJiContinuation.Step.INVOKE?!y.retained().isEmpty():y.retained().isEmpty()))throw new IllegalArgumentException("invalid yiji program");
     }
     uniqueSeats(f.targets(),n);int previous=-1;for(int target:f.targets()){int position=Math.floorMod(target-c.source(),n);if(position<=previous)throw new IllegalArgumentException("invalid trick target order");previous=position;}
-    if(Set.of(CardType.GUOHE,CardType.SHUNSHOU,CardType.WUZHONG,CardType.JUEDOU,CardType.HUOGONG,CardType.JIEDAO).contains(c.effectiveType()) && (f.targets().size()!=1 || f.cursor()!=0))throw new IllegalArgumentException("single trick has multiple targets");
-    if(c.effectiveType()!=CardType.WUGU && (f.revealed()||!f.harvest().isEmpty()) || !f.revealed()&&!f.harvest().isEmpty())throw new IllegalArgumentException("unexpected harvest pool");
+    if(Set.of(CardType.JIEJIA,CardType.GUOHE,CardType.SHUNSHOU,CardType.WUZHONG,CardType.JUEDOU,CardType.HUOGONG,CardType.JIEDAO).contains(c.effectiveType()) && (f.targets().size()!=1 || f.cursor()!=0))throw new IllegalArgumentException("single trick has multiple targets");
+    if(c.effectiveType()!=CardType.WUGU && c.effectiveType()!=CardType.ZHULU && (f.revealed()||!f.harvest().isEmpty()) || !f.revealed()&&!f.harvest().isEmpty())throw new IllegalArgumentException("unexpected harvest pool");
     if(c.effectiveType()==CardType.JUEDOU){
       if((f.duelResponder()<0)!=(f.duelOther()<0))throw new IllegalArgumentException("partial duel actors");
       if(f.duelResponder()>=0){seat(f.duelResponder(),n);seat(f.duelOther(),n);if(f.duelResponder()==f.duelOther() || !Set.of(c.source(),c.target()).equals(Set.of(f.duelResponder(),f.duelOther())))throw new IllegalArgumentException("invalid duel actors");}

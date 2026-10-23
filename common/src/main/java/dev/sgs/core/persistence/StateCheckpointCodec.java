@@ -44,7 +44,9 @@ public final class StateCheckpointCodec {
       }
       out.writeInt(checkpoint.faceUpProcessing().size());for(long id:new TreeSet<>(checkpoint.faceUpProcessing()))out.writeLong(id);
       out.writeLong(checkpoint.movementSequence());out.writeBoolean(checkpoint.sharedRandom());
-      blob(out,checkpoint.gameRandom());blob(out,checkpoint.deckRandom());out.flush();
+      blob(out,checkpoint.gameRandom());blob(out,checkpoint.deckRandom());if(checkpoint.version()>=3){out.writeBoolean(checkpoint.completeStatistics());for(long total:checkpoint.damageTotals())out.writeLong(total);
+      out.writeBoolean(checkpoint.draft()!=null);if(checkpoint.draft()!=null){var d=checkpoint.draft();out.writeLong(d.id());out.writeInt(d.source());out.writeInt(d.picker());text(out,d.title());out.writeInt(d.slots().size());for(var slot:d.slots()){out.writeLong(slot.card().instanceId());out.writeInt(slot.recipient());}}
+      }out.flush();
       byte[] payload=bytes.toByteArray();if(payload.length+32>MAX_BYTES)throw new IllegalArgumentException("checkpoint too large");
       bytes.write(digest(payload));return bytes.toByteArray();
     }catch(IOException e){throw new IllegalArgumentException("cannot encode checkpoint",e);}
@@ -55,7 +57,7 @@ public final class StateCheckpointCodec {
     if(!MessageDigest.isEqual(digest(payload),hash))throw new IllegalArgumentException("checkpoint checksum mismatch");
     try(var in=new DataInputStream(new ByteArrayInputStream(payload))){
       if(in.readInt()!=MAGIC)throw new IllegalArgumentException("bad checkpoint magic");
-      int version=in.readInt();if(version!=StateCheckpoint.VERSION)throw new IllegalArgumentException("unsupported checkpoint version "+version);
+      int version=in.readInt();if(version!=2&&version!=StateCheckpoint.VERSION)throw new IllegalArgumentException("unsupported checkpoint version "+version);
       String content=text(in,128);var status=enumeration(in,GameStatus.class);int current=in.readInt();var phase=enumeration(in,Phase.class);
       int turn=in.readInt(),sha=in.readInt();boolean jiu=in.readBoolean(),boost=in.readBoolean(),skipPlay=in.readBoolean(),skipDraw=in.readBoolean();
       String mode=text(in,32);var chained=new HashSet<Integer>();int size=count(in,8);
@@ -87,8 +89,14 @@ public final class StateCheckpointCodec {
       var faceUp=new HashSet<Long>();size=count(in,StateCheckpoint.MAX_CARDS);
       for(int i=0;i<size;i++)if(!faceUp.add(in.readLong()))throw new IllegalArgumentException("duplicate processing visibility");
       long sequence=in.readLong();boolean shared=in.readBoolean();byte[] gameRandom=blob(in),deckRandom=blob(in);
+      boolean complete=version>=3&&in.readBoolean();var totals=new ArrayList<Long>();for(int i=0;i<8;i++)totals.add(version>=3?in.readLong():0L);
+      dev.sgs.core.match.dto.MatchViews.DraftView draft=null;
+      if(version>=3&&in.readBoolean()){long id=in.readLong();int source=in.readInt(),picker=in.readInt();String title=text(in,64);int n=count(in,8);var slots=new ArrayList<dev.sgs.core.match.dto.MatchViews.DraftSlot>();
+        for(int i=0;i<n;i++){long card=in.readLong();int recipient=in.readInt();var physical=zones.stream().flatMap(z->z.cards().stream()).filter(c->c.id()==card).findFirst().orElseThrow();slots.add(new dev.sgs.core.match.dto.MatchViews.DraftSlot(dev.sgs.core.match.dto.MatchViews.CardView.of(physical.create()),recipient));}
+        draft=new dev.sgs.core.match.dto.MatchViews.DraftView(id,source,picker,title,slots,true);
+      }
       if(in.available()!=0)throw new IllegalArgumentException("trailing checkpoint bytes");
-      var checkpoint=new StateCheckpoint(version,content,runtime,players,zones,faceUp,sequence,gameRandom,deckRandom,shared);
+      var checkpoint=new StateCheckpoint(version,content,runtime,players,zones,faceUp,sequence,gameRandom,deckRandom,shared,totals,complete,draft);
       checkpoint.validate();return checkpoint;
     }catch(IOException|RuntimeException e){throw new IllegalArgumentException("invalid checkpoint: "+e.getMessage(),e);}
   }

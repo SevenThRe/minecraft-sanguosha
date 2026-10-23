@@ -21,14 +21,16 @@ public final class ProbeMod {
     public static ResourceLocation id(String path) { return ResourceLocation.fromNamespaceAndPath(ID, path); }
 
     public static void initialize(String loader, String version) {
+        Balm.getItems().registerCreativeModeTab(()->new net.minecraft.world.item.ItemStack(table),id("main"));
         Balm.getBlocks().register(id -> table = new TableBlock(BlockBehaviour.Properties.of().strength(2.0f).noOcclusion()),
-                (block, id) -> new BlockItem(block, new Item.Properties()), id("card_table"), null);
-        Balm.getItems().registerItem(id -> deck = new DeckPackItem(new Item.Properties().stacksTo(1)), id("deck_pack"));
+                (block, id) -> new BlockItem(block, new Item.Properties()), id("card_table"), id("main"));
+        Balm.getItems().registerItem(id -> deck = new DeckPackItem(new Item.Properties().stacksTo(1)), id("deck_pack"),id("main"));
         dev.sgs.validation.survival.SurvivalService.initialize();
-        Balm.getNetworking().defineNetworkVersion(ProbeMod.ID, "1");
+        ProbeNetwork.initialize();
         dev.sgs.validation.lobby.LobbyNetwork.initialize();
         dev.sgs.validation.match.MatchNetwork.initialize();
         dev.sgs.validation.match.SkinNetwork.initialize();
+        dev.sgs.validation.match.MatchChatNetwork.initialize();
         dev.sgs.validation.social.FeedbackNetwork.initialize();
         dev.sgs.validation.social.GiftNetwork.initialize();
         dev.sgs.validation.social.GiftService.initializeCommands();
@@ -51,11 +53,14 @@ public final class ProbeMod {
         Balm.getEvents().onEvent(net.blay09.mods.balm.api.event.server.ServerStoppedEvent.class,
                 event -> dev.sgs.validation.match.WorldMatchPersistence.stoppedAll());
         Balm.getEvents().onEvent(net.blay09.mods.balm.api.event.server.ServerStoppedEvent.class,event -> dev.sgs.validation.addon.HeroPackService.stop());
+        Balm.getEvents().onEvent(ServerStartedEvent.class, event -> SmokeChecks.run(event.getServer()));
+        Balm.getEvents().onEvent(PlayerLoginEvent.class, event -> SmokeChecks.onLogin(event.getPlayer()));
         Balm.getEvents().onEvent(PlayerLoginEvent.class,
                 event -> dev.sgs.validation.match.MatchService.reconnect(event.getPlayer()));
         Balm.getEvents().onEvent(PlayerLoginEvent.class,
                 event -> dev.sgs.validation.social.FeedbackService.onLogin(event.getPlayer()));
         dev.sgs.validation.collection.CollectionService.initialize();
+        Balm.getEvents().onEvent(ServerStartedEvent.class,event -> dev.sgs.validation.social.SocialClosureChecks.run(event.getServer()));
         LOG.info("Minecraft-SanGuoSha version={} minecraft={} loader={}", version,
                 SharedConstants.getCurrentVersion().getName(), loader);
     }

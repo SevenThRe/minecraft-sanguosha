@@ -24,11 +24,7 @@ public final class BotPolicy implements PromptResponder {
       dev.sgs.core.game.GameState state, dev.sgs.core.engine.PromptRequest prompt) {
     return switch (prompt.type()) {
       case DODGE_SHA -> firstOf(prompt.asker(), CardType.SHAN);
-      case WUXIE_COUNTER -> {
-        if(prompt.asker().hero()!=null&&prompt.asker().hero().skillIds().contains("kanpo"))
-          yield prompt.asker().handView().stream().filter(dev.sgs.core.card.CardInstance::isBlack).findFirst().map(c->PlayDecision.alternate(c,CardType.WUXIE));
-        yield Optional.empty();
-      }
+      case WUXIE_COUNTER -> Optional.empty(); // No effect/parity context: do not spend a card blindly.
       case HUJIA_SHAN -> prompt.asker().identity()==dev.sgs.core.Identity.LOYALIST
           ? firstOf(prompt.asker(),CardType.SHAN):Optional.empty();
       case DUEL_SHA, RESPOND_SHA_NANMAN, JIEDAO_RESPONSE -> attack(prompt.asker());
@@ -59,6 +55,42 @@ public final class BotPolicy implements PromptResponder {
     };
   }
 
+  /** Shared live/simulation policy uses public effect, current parity and public relationships. */
+  public Optional<PlayDecision> counterspell(dev.sgs.core.game.GameState state,dev.sgs.core.engine.PromptRequest prompt,CardType effect,int depth){
+    var me=prompt.asker();var target=prompt.subject();if(target==null||effect==null)return Optional.empty();
+    if(me.hero()==null||!me.hero().skillIds().contains("kanpo"))return Optional.empty();
+    boolean friend=me==target||state.areTeammates(me,target);
+    boolean enemy=state.teamMode()&&!friend;
+    if(!state.teamMode()&&target.identityPublic()){
+      var own=me.identity();var other=target.identity();
+      boolean royal=own==dev.sgs.core.Identity.LORD||own==dev.sgs.core.Identity.LOYALIST;
+      boolean otherRoyal=other==dev.sgs.core.Identity.LORD||other==dev.sgs.core.Identity.LOYALIST;
+      friend|=royal&&otherRoyal||own==dev.sgs.core.Identity.REBEL&&other==dev.sgs.core.Identity.REBEL;
+      enemy=royal&&other==dev.sgs.core.Identity.REBEL||own==dev.sgs.core.Identity.REBEL&&otherRoyal;
+    }
+    if(!friend&&!enemy)return Optional.empty();
+    Boolean helpful=switch(effect){
+      case WUZHONG,WUGU,TAOYUAN->true;
+      case NANMAN,WANJIAN,JUEDOU,HUOGONG,SHUNSHOU,GUOHE,JIEDAO,LEBU,BINGLIANG,SHANDIAN->false;
+      case TIESUO->state.chained(target.seat());
+      default->null;
+    };
+    if(helpful==null)return Optional.empty();
+    boolean wantEffect=friend==helpful;
+    boolean currentlyResolves=depth%2==0;
+    if(wantEffect==currentlyResolves)return Optional.empty();
+    var physical=firstOf(me,CardType.WUXIE);if(physical.isPresent())return physical;
+    if(me.hero()!=null&&me.hero().skillIds().contains("kanpo"))return me.handView().stream().filter(dev.sgs.core.card.CardInstance::isBlack).findFirst().map(c->PlayDecision.alternate(c,CardType.WUXIE));
+    return Optional.empty();
+  }
+  @Override public dev.sgs.core.engine.CounterspellResult collectCounterspell(dev.sgs.core.game.GameState state,dev.sgs.core.engine.CounterspellWindow window){
+    for(var prompt:window.requests()){
+      if(window.closed()||window.expired())break;
+      window.offer(prompt.asker().id(),prompt.id(),WuxieResponse.answer(counterspell(state,prompt,window.effectType(),window.chainDepth())));
+    }
+    return window.finish();
+  }
+
   @Override public boolean invoke(dev.sgs.core.game.GameState state,dev.sgs.core.engine.PromptRequest prompt){
     var external=dev.sgs.core.addon.AddonRuntime.current().botInvoke(state,prompt);if(external.isPresent())return external.get();
     return switch(prompt.skillId()){
@@ -75,7 +107,7 @@ public final class BotPolicy implements PromptResponder {
       case "hujia"->prompt.asker().handView().stream().noneMatch(c->c.type()==CardType.SHAN);
       case "jijiang"->attack(prompt.asker()).isEmpty();
       case "bagua"->prompt.asker().identity()==dev.sgs.core.Identity.LOYALIST;
-      case "jushou","buqu","niepan","jieming","bazhen","shuangxiong","xingshang","songwei","zaiqi","lieren","haoshi","tuntian","beige","xinsheng","zhiba_gain"->true;
+      case "jushou","buqu","niepan","jieming","leiji","fangzhu","bazhen","shuangxiong","xingshang","songwei","zaiqi","lieren","haoshi","tuntian","beige","xinsheng","zhiba_gain"->true;
       case "fangquan"->prompt.asker().handCount()>0 && prompt.asker().handView().stream().noneMatch(c->c.type()==CardType.SHA||c.type()==CardType.HUOSHA||c.type()==CardType.LEISHA);
       case "baonue"->state.areTeammates(prompt.asker(),prompt.subject())||prompt.asker().identity()==dev.sgs.core.Identity.LOYALIST;
       case "zhiba_accept"->true;
@@ -127,9 +159,9 @@ public final class BotPolicy implements PromptResponder {
       return Optional.empty();
     }
     if(prompt.type()==dev.sgs.core.engine.PromptType.TUXI_TARGET){
-      return prompt.allowedTargetSeats().stream().filter(seat->!state.areTeammates(prompt.asker(),state.players().get(seat)))
-          .max(java.util.Comparator.comparingInt(seat->state.players().get(seat).handCount()))
-          .map(seat->new dev.sgs.core.engine.SkillChoice(0,seat));
+      var targets=prompt.allowedTargetSeats().stream().filter(seat->!state.areTeammates(prompt.asker(),state.players().get(seat)))
+          .sorted(java.util.Comparator.<Integer>comparingInt(seat->state.players().get(seat).handCount()).reversed()).limit(2).toList();
+      return targets.isEmpty()?Optional.empty():Optional.of(dev.sgs.core.engine.SkillChoice.targets(targets));
     }
     if(prompt.type()==dev.sgs.core.engine.PromptType.GANGLIE_DISCARD && !prompt.choices().isEmpty() && prompt.asker().hp()<=2)
       return Optional.of(new dev.sgs.core.engine.SkillChoice(prompt.choices().getFirst().instanceId(),-1));

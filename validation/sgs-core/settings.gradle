@@ -1,2 +1,0 @@
-// Standalone pure-Java build, deliberately independent of Minecraft plugin resolution.
-rootProject.name = 'sgs-core'

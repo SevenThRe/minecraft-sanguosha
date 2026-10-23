@@ -58,7 +58,7 @@ public final class RenDeSkill implements ActiveSkill,dev.sgs.core.engine.skill.P
   }
 
   @Override
-  public SkillResult activate(
+  public SkillResult preview(
       SkillEngine api, SgsPlayer from, SgsPlayer target, List<CardInstance> cards) {
     if (from != owner) {
       return SkillResult.reject("not_skill_owner");
@@ -73,6 +73,11 @@ public final class RenDeSkill implements ActiveSkill,dev.sgs.core.engine.skill.P
       return SkillResult.reject("no_cards");
     }
 
+    return SkillResult.ok();
+  }
+  public SkillResult activate(
+      SkillEngine api, SgsPlayer from, SgsPlayer target, List<CardInstance> cards) {
+    var validation=preview(api,from,target,cards);if(!validation.accepted())return validation;
     int turn = api.gameState().turnNumber();
     if (turn != turnTracked) {
       turnTracked = turn;

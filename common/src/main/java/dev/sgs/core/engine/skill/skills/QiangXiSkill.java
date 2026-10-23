@@ -9,7 +9,7 @@ public final class QiangXiSkill implements ActiveSkill,PersistentSkillMemory {
   public QiangXiSkill(SgsPlayer owner){this.owner=owner;}
   public String id(){return "qiangxi";}public SgsPlayer owner(){return owner;}
   public String unavailableReason(SkillEngine api){return usedTurn==api.gameState().turnNumber()?"SKILL_USED_THIS_TURN":"";}
-  public SkillResult activate(SkillEngine api,SgsPlayer actor,SgsPlayer target,List<CardInstance> costs){
+  public SkillResult preview(SkillEngine api,SgsPlayer actor,SgsPlayer target,List<CardInstance> costs){
     var g=api.gameState();
     if(actor!=owner || !owner.alive())return SkillResult.reject("not_skill_owner");
     if(usedTurn==g.turnNumber())return SkillResult.reject("already_used");
@@ -22,6 +22,11 @@ public final class QiangXiSkill implements ActiveSkill,PersistentSkillMemory {
       if(CardZone.equipment(owner.seat()).equals(zone))range=1;
     }
     if(g.distance(owner,target)>range)return SkillResult.reject("out_of_range_after_cost");
+    return SkillResult.ok();
+  }
+  public SkillResult activate(SkillEngine api,SgsPlayer actor,SgsPlayer target,List<CardInstance> costs){
+    var validation=preview(api,actor,target,costs);if(!validation.accepted())return validation;
+    var g=api.gameState();
     usedTurn=g.turnNumber();
     if(costs.isEmpty())api.loseHp(owner,1);else api.discardCards(owner,costs);
     // The committed effect remains valid even when its HP cost kills the source.

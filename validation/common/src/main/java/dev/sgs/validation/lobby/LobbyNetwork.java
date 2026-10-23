@@ -24,12 +24,21 @@ public final class LobbyNetwork {
     public record PlayerView(String uuid,String name) {}
     public record HeroView(String id,String name,String kingdom,String portrait,String description,
         List<dev.sgs.core.addon.SkillPresentation> skills) {}
+    public record CardPackView(String id,String name,boolean available,boolean enabled,String reason) {}
+    public static List<CardPackView> cardPacks(dev.sgs.core.config.PackPolicy policy){
+        return List.of(new CardPackView("cards.standard","标准包",true,policy.allows("cards.standard"),""),
+            new CardPackView("cards.ex","EX 包",true,policy.allows("cards.ex"),""),
+            new CardPackView("cards.junzheng","军争包",true,policy.allows("cards.junzheng"),""),
+            new CardPackView("cards.zhulu","逐鹿天下包",false,false,"首批三种规则已实现，完整牌堆尚未接入"));
+    }
     public record RoomView(long id, String name, String mode, int members, int capacity, int ready,
                            int ai,boolean owner,boolean playing,List<SeatView> seats,boolean teammateSharing,SettingsView settings) {}
     public record View(long revision, long request, boolean success, String reason, long ownRoom,
                        String queued, int sixQueued, int eightQueued, boolean ownReady, List<RoomView> rooms,int twoVTwoQueued,
                        String selfName,List<PlayerView> players,long inviteRoom,List<String> chat,List<HeroView> heroes,long selfXp,long selfHonor,
-                       List<String> enabledModes,boolean matchmaking) {}
+                       List<String> enabledModes,boolean matchmaking,List<CardPackView> cardPacks) {
+        public View {cardPacks=cardPacks==null?List.of():List.copyOf(cardPacks);}
+    }
 
     public record Intent(long request, long revision, String action, String mode, long room,String data) implements CustomPacketPayload {
         public Intent(long request,long revision,String action,String mode,long room){this(request,revision,action,mode,room,"");}

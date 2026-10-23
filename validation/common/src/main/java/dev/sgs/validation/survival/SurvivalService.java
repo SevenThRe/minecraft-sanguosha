@@ -33,6 +33,7 @@ public final class SurvivalService {
     }
     static void reload(MinecraftServer server) throws java.io.IOException {
         var next=ServerPolicy.load(directory(server));
+        next.packs().validateCatalog(dev.sgs.core.addon.AddonRuntime.current());
         var collection=dev.sgs.validation.collection.CollectionService.preparePolicy(server);
         POLICIES.put(server,next);
         dev.sgs.validation.collection.CollectionService.installPolicy(server,collection);
@@ -45,6 +46,7 @@ public final class SurvivalService {
     public static void initialize() {
         Balm.getEvents().onEvent(net.blay09.mods.balm.api.event.server.ServerStartingEvent.class,e->policy(e.getServer()));
         Balm.getEvents().onEvent(net.blay09.mods.balm.api.event.server.ServerStartedEvent.class,e->{
+            if(Boolean.getBoolean("sgs.survivalSmoke"))SurvivalSmokeChecks.run(e.getServer());
         });
         Balm.getEvents().onEvent(net.blay09.mods.balm.api.event.server.ServerStoppedEvent.class,e->{POLICIES.clear();ANCHORS.clear();});
         Balm.getEvents().onEvent(PlayerLogoutEvent.class,e->ANCHORS.remove(e.getPlayer().getUUID()));
@@ -53,11 +55,23 @@ public final class SurvivalService {
             if(entity instanceof Villager v && !v.level().isClientSide && v.tickCount%100==0)merchant(v);
         });
         Balm.getCommands().register(dispatcher->dispatcher.register(Commands.literal("sgs")
+            .then(Commands.literal("packs").requires(source->source.hasPermission(2)).executes(context->{
+                var source=context.getSource();var packs=policy(source.getServer()).packs();
+                var catalog=dev.sgs.core.addon.AddonRuntime.current();
+                var keys=new TreeSet<>(List.of("cards.standard","cards.ex","cards.junzheng","cards.zhulu",
+                    "heroes.standard","heroes.wind","heroes.fire","heroes.forest","heroes.mountain","heroes.legacy"));
+                catalog.packs().forEach(p->keys.add("heroes.addon."+p.id()));
+                keys.addAll(packs.enabled().keySet());
+                source.sendSuccess(()->Component.literal("下一局牌堆："+packs.contentPool().size()+" 张；可选武将："+
+                    catalog.heroes().stream().filter(h->packs.allows(dev.sgs.core.config.PackPolicy.heroPack(h))).count()+" 名"),false);
+                for(String key:keys)source.sendSuccess(()->Component.literal(key+" = "+packs.allows(key)),false);
+                return 1;
+            }))
             .then(Commands.literal("reload").requires(source->source.hasPermission(2)).executes(context->{
                 var source=context.getSource();var server=source.getServer();
                 try {
                     reload(server);
-                    source.sendSuccess(()->Component.literal("三国杀配置已重载；已开始的对局继续，关闭的玩法禁止新加入和开局。"),true);
+                    source.sendSuccess(()->Component.literal("三国杀配置已重载；内容包开关从下一局生效，已有对局保留原规则。关闭的玩法禁止新加入和开局。"),true);
                     return 1;
                 } catch(Exception e) {source.sendFailure(Component.literal("重载失败，保留当前配置："+e.getMessage()));return 0;}
             }))));

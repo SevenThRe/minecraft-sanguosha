@@ -21,11 +21,15 @@ public final class QingNangSkill implements ActiveSkill,PersistentSkillMemory {
   public String id(){return ID;}
   public SgsPlayer owner(){return owner;}
   public String unavailableReason(SkillEngine api){return usedTurn==api.gameState().turnNumber()?"SKILL_USED_THIS_TURN":"";}
-  public SkillResult activate(SkillEngine api,SgsPlayer actor,SgsPlayer target,List<CardInstance> cards){
+  public SkillResult preview(SkillEngine api,SgsPlayer actor,SgsPlayer target,List<CardInstance> cards){
     if(actor!=owner || !owner.alive())return SkillResult.reject("not_skill_owner");
     if(usedTurn==api.gameState().turnNumber())return SkillResult.reject("already_used");
     if(target==null || !api.gameState().players().contains(target) || !target.alive() || target.hp()>=target.maxHp())return SkillResult.reject("target_not_wounded");
     if(cards==null || cards.size()!=1 || !CardZone.hand(owner.seat()).equals(api.gameState().cards().locate(cards.getFirst().instanceId())))return SkillResult.reject("one_hand_card_required");
+    return SkillResult.ok();
+  }
+  public SkillResult activate(SkillEngine api,SgsPlayer actor,SgsPlayer target,List<CardInstance> cards){
+    var validation=preview(api,actor,target,cards);if(!validation.accepted())return validation;
     usedTurn=api.gameState().turnNumber();api.discardCards(owner,cards);
     if(target.alive())api.heal(target,1);
     return SkillResult.ok();

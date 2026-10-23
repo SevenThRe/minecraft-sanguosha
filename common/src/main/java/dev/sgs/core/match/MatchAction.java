@@ -23,7 +23,8 @@ public final class MatchAction {
     REPLACE_OPENING_HAND,
     KEEP_OPENING_HAND,
     PLAY_ATTACK_TARGETS,
-    BAN_HERO
+    BAN_HERO,
+    PREVIEW_HERO
   }
 
   public static final int NO_SEAT = -1;
@@ -41,6 +42,7 @@ public final class MatchAction {
   private final List<Long> cardIds;
   private final String heroId;
   private final List<Integer> targetSeats;
+  private final dev.sgs.core.engine.SkillChoice.DeckOrder deckOrder;
 
   private MatchAction(
       Kind kind,
@@ -58,6 +60,10 @@ public final class MatchAction {
   }
   private MatchAction(Kind kind,int nonce,long promptId,boolean accept,long cardId,int declaredTypeOrdinal,
       int targetSeat,int secondarySeat,String skillId,List<Long> cardIds,String heroId,List<Integer> targetSeats){
+    this(kind,nonce,promptId,accept,cardId,declaredTypeOrdinal,targetSeat,secondarySeat,skillId,cardIds,heroId,targetSeats,null);
+  }
+  private MatchAction(Kind kind,int nonce,long promptId,boolean accept,long cardId,int declaredTypeOrdinal,
+      int targetSeat,int secondarySeat,String skillId,List<Long> cardIds,String heroId,List<Integer> targetSeats,dev.sgs.core.engine.SkillChoice.DeckOrder deckOrder){
     this.kind = kind;
     this.nonce = nonce;
     this.promptId = promptId;
@@ -70,6 +76,7 @@ public final class MatchAction {
     this.cardIds = cardIds == null ? List.of() : List.copyOf(cardIds);
     this.heroId = heroId;
     this.targetSeats=targetSeats==null?List.of():List.copyOf(targetSeats);
+    this.deckOrder=deckOrder;
   }
 
   public static MatchAction revealIdentity(int nonce,int backSlot){
@@ -79,6 +86,7 @@ public final class MatchAction {
     return new MatchAction(Kind.CONFIRM_IDENTITY,nonce,0L,true,NO_CARD,-1,NO_SEAT,NO_SEAT,null,List.of(),null);
   }
 
+  public static MatchAction previewHero(int nonce,String heroId){return new MatchAction(Kind.PREVIEW_HERO,nonce,0L,false,NO_CARD,-1,NO_SEAT,NO_SEAT,null,List.of(),heroId);}
   public static MatchAction selectHero(int nonce, String heroId) {
     return new MatchAction(
         Kind.SELECT_HERO, nonce, 0L, true, NO_CARD, -1, NO_SEAT, NO_SEAT, null, List.of(), heroId);
@@ -140,6 +148,14 @@ public final class MatchAction {
         NO_SEAT,NO_SEAT,null,List.of(),null,targets);
   }
   public List<Integer> targetSeats(){return targetSeats;}
+  public dev.sgs.core.engine.SkillChoice.DeckOrder deckOrder(){return deckOrder;}
+  public static MatchAction orderDeck(int nonce,long promptId,List<Long> top,List<Long> bottom){
+    return new MatchAction(Kind.PROMPT_RESPONSE,nonce,promptId,true,NO_CARD,-1,NO_SEAT,NO_SEAT,null,List.of(),null,List.of(),new dev.sgs.core.engine.SkillChoice.DeckOrder(top,bottom));
+  }
+  public static MatchAction of(Kind kind,int nonce,long promptId,boolean accept,long cardId,int declaredTypeOrdinal,
+      int targetSeat,int secondarySeat,String skillId,List<Long> cardIds,String heroId,List<Integer> targets,dev.sgs.core.engine.SkillChoice.DeckOrder order){
+    return new MatchAction(kind,nonce,promptId,accept,cardId,declaredTypeOrdinal,targetSeat,secondarySeat,skillId,cardIds,heroId,targets,order);
+  }
   public static MatchAction of(Kind kind,int nonce,long promptId,boolean accept,long cardId,int declaredTypeOrdinal,
       int targetSeat,int secondarySeat,String skillId,List<Long> cardIds,String heroId,List<Integer> targets){
     return new MatchAction(kind,nonce,promptId,accept,cardId,declaredTypeOrdinal,targetSeat,secondarySeat,skillId,cardIds,heroId,targets);
@@ -184,6 +200,10 @@ public final class MatchAction {
   public static MatchAction skillChoice(int nonce,long promptId,long cardId,int targetSeat) {
     return new MatchAction(Kind.PROMPT_RESPONSE,nonce,promptId,true,cardId,-1,targetSeat,
         NO_SEAT,null,List.of(),null);
+  }
+
+  public static MatchAction skillTargets(int nonce,long promptId,List<Integer> seats){
+    return new MatchAction(Kind.PROMPT_RESPONSE,nonce,promptId,true,0,-1,-1,-1,null,List.of(),null,seats);
   }
 
   public static MatchAction leave(int nonce) {

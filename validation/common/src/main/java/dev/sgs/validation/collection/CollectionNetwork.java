@@ -27,7 +27,13 @@ public final class CollectionNetwork {
         }
     }
     public record State(long request,boolean open,boolean enabled,boolean market,long tokens,long souls,int guaranteedNewBelow,
-        Set<String> skins,List<Hero> heroes,String message,List<dev.sgs.core.collection.CollectionDatabase.Draw> draws){}
+        Set<String> skins,List<Hero> heroes,String message,List<dev.sgs.core.collection.CollectionDatabase.Draw> draws,
+        dev.sgs.core.collection.CollectionPolicy.Currency tokenCurrency,dev.sgs.core.collection.CollectionPolicy.Currency soulCurrency,long drawTokenCost,Map<String,String> heroGroups,List<String> earningHints){
+        public State{earningHints=earningHints==null?List.of():List.copyOf(earningHints);tokenCurrency=tokenCurrency==null?dev.sgs.core.collection.CollectionPolicy.DEFAULT_TOKEN:tokenCurrency;soulCurrency=soulCurrency==null?dev.sgs.core.collection.CollectionPolicy.DEFAULT_SOUL:soulCurrency;drawTokenCost=Math.max(1,drawTokenCost);heroGroups=heroGroups==null?Map.of():Map.copyOf(heroGroups);}
+        public State(long request,boolean open,boolean enabled,boolean market,long tokens,long souls,int guaranteedNewBelow,Set<String> skins,List<Hero> heroes,String message,List<dev.sgs.core.collection.CollectionDatabase.Draw> draws,dev.sgs.core.collection.CollectionPolicy.Currency tokenCurrency,dev.sgs.core.collection.CollectionPolicy.Currency soulCurrency,long drawTokenCost,Map<String,String> heroGroups){
+            this(request,open,enabled,market,tokens,souls,guaranteedNewBelow,skins,heroes,message,draws,tokenCurrency,soulCurrency,drawTokenCost,heroGroups,List.of());
+        }
+    }
     public record Intent(long request,String action,String hero,long expectedPrice) implements CustomPacketPayload {
         public Intent(long request,String action,String hero){this(request,action,hero,-1);}
         public static final Type<Intent> TYPE=new Type<>(ProbeMod.id("collection_intent"));

@@ -213,7 +213,7 @@ public final class LobbyService {
             default -> {send(player,intent.request(),false,"不支持的操作",true);return;}
         }} catch(dev.sgs.core.collection.OwnedHeroSelection.Unavailable error) {
             send(player,intent.request(),false,error.getMessage(),true);return;
-        } catch(dev.sgs.core.match.MatchConfig.HeroOfferCapacityException error) {
+        } catch(dev.sgs.core.match.MatchConfig.HeroOfferCapacityException | dev.sgs.core.match.MatchConfig.ContentCapacityException error) {
             send(player,intent.request(),false,error.getMessage(),true);return;
         } catch(RuntimeException error) {
             send(player,intent.request(),false,"设置或输入无效，请检查名称、密码、时间和禁将",true);return;
@@ -282,7 +282,8 @@ public final class LobbyService {
             rooms.queueSize(RoomMode.SIX),rooms.queueSize(RoomMode.EIGHT),own.map(room -> room.isReady(player.getUUID())).orElse(false),list,rooms.queueSize(RoomMode.TWO_V_TWO),
             player.getGameProfile().getName(),player.getServer().getPlayerList().getPlayers().stream().map(p->new LobbyNetwork.PlayerView(p.getUUID().toString(),p.getGameProfile().getName())).toList(),
             rooms.pendingInvite(player.getUUID()).orElse(-1L),own.map(r->List.copyOf(chat.getOrDefault(r.id(),new ArrayDeque<>()))).orElse(List.of()),heroes,xp,honor,
-            java.util.stream.Stream.of("six","eight","two_v_two").filter(SurvivalService.policy(player.getServer())::modeEnabled).toList(),SurvivalService.policy(player.getServer()).matchmaking());
+            java.util.stream.Stream.of("six","eight","two_v_two").filter(SurvivalService.policy(player.getServer())::modeEnabled).toList(),SurvivalService.policy(player.getServer()).matchmaking(),
+            LobbyNetwork.cardPacks(SurvivalService.policy(player.getServer()).packs()));
         var packet = new LobbyNetwork.Snapshot(JSON.toJson(view));
         if (cache) replies.put(player.getUUID(),packet);
         Balm.getNetworking().sendTo(player,packet);

@@ -1,6 +1,6 @@
 package dev.sgs.core.addon;
 import java.util.*;
-/** Optional API-v1 sidecar, separate from the original six-field manifest. Exact versions only. */
+/** Optional API-initial sidecar, separate from the original six-field manifest. Exact versions only. */
 public final class PackDependencies {
   public static final String RESOURCE="META-INF/sgs/dependencies.properties";
   private PackDependencies(){}

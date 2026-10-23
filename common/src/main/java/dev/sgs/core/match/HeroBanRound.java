@@ -15,15 +15,20 @@ public final class HeroBanRound {
     candidates=List.copyOf(surplus.subList(0,Math.min(10,surplus.size())));
   }
   public List<String> candidates(){return candidates;}
+  public synchronized List<String> availableCandidates(){return candidates.stream().filter(id->!choices.containsValue(id)).toList();}
   public Map<Integer,String> choices(){return Map.copyOf(choices);}
-  public boolean complete(){return choices.size()==eligible.size();}
-  public String choose(int seat,String hero){
+  public boolean complete(){return choices.size()==Math.min(eligible.size(),candidates.size());}
+  public synchronized String choose(int seat,String hero){
     if(seat<0 || seat>=eligible.size())return "INVALID_SEAT";
     if(choices.containsKey(seat))return "BAN_ALREADY_CHOSEN";
     if(hero==null || !candidates.contains(hero))return "INVALID_BAN_HERO";
+    if(choices.containsValue(hero))return "BAN_HERO_TAKEN";
     choices.put(seat,hero);return null;
   }
-  public void autoChoose(int seat,Random random){if(!choices.containsKey(seat)&&!candidates.isEmpty())choose(seat,candidates.get(random.nextInt(candidates.size())));}
+  public synchronized void autoChoose(int seat,Random random){
+    var available=candidates.stream().filter(id->!choices.containsValue(id)).toList();
+    if(!choices.containsKey(seat)&&!available.isEmpty())choose(seat,available.get(random.nextInt(available.size())));
+  }
   public List<List<String>> offers(Random random){
     var bans=new HashSet<>(choices.values());
     return deal(catalog.stream().filter(id->!bans.contains(id)).toList(),eligible,count,random);

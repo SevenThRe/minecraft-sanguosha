@@ -14,7 +14,11 @@ public final class DeathSeal {
         int x=box.x(),y=box.y(),s=box.size();
         g.fill(x+s/8,y+s/8,x+s-s/8,y+s-s/8,0xd02b201b);
         g.blit(ProbeMod.id("textures/gui/identity/death_border_v2.png"),x,y,s,s,0,0,1254,1254,1254,1254);
-        if(label.length()>2) {
+        if(dev.sgs.validation.client.ClientText.english()) {
+            String role=switch(label){case "主公阵亡"->"Lord";case "忠臣阵亡"->"Loyalist";case "反贼阵亡"->"Rebel";case "内奸阵亡"->"Renegade";case "友方阵亡"->"Ally";case "敌方阵亡"->"Enemy";default->"";};
+            if(!role.isEmpty())InkText.fitted(g,font,role,x+s/2f,y+s*.22f,s*.72f,s*.25f,0xffffaa81);
+            InkText.fitted(g,font,"Dead",x+s/2f,y+s*(role.isEmpty()?.34f:.51f),s*.68f,s*.28f,0xffffaa81);
+        } else if(label.length()>2) {
             InkText.fitted(g,font,label.substring(0,2),x+s/2f,y+s*.22f,s*.65f,s*.25f,0xffffaa81);
             InkText.fitted(g,font,"阵亡",x+s/2f,y+s*.51f,s*.65f,s*.25f,0xffffaa81);
         } else InkText.fitted(g,font,label,x+s/2f,y+s*.34f,s*.68f,s*.32f,0xffffaa81);

@@ -13,6 +13,9 @@ public interface GameEventListener {
     onDamageApplied(target,source,amount);
   }
 
+  /** One elemental damage recipient completed and left the chain, before the next recipient. */
+  default void onChainReleased(SgsPlayer target) {}
+
   default void onHpLost(SgsPlayer target,int amount) {}
 
   default void onDyingResolved(SgsPlayer victim, boolean rescued) {}

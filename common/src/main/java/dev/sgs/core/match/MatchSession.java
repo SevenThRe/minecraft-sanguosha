@@ -81,6 +81,7 @@ public final class MatchSession implements PromptResponder {
   private final List<MatchEndpoint> spectators = new ArrayList<>(); // Worker-owned.
   private volatile MatchSnapshot publicSnapshot;
   private long selectionDeadline;
+  private final Map<UUID,String> heroPreviews=new HashMap<>();
   private boolean identityIntroActive;
   private HeroBanRound heroBanRound;
   private boolean heroBanActive;
@@ -143,7 +144,7 @@ public final class MatchSession implements PromptResponder {
         new dev.sgs.core.room.RoomSettings(config.roomSettings().password(),config.turnTimeoutSeconds(),config.responseTimeoutSeconds(),
             config.selectionTimeoutSeconds(),config.roomSettings().allowChat(),config.roomSettings().allowSpectators(),
             config.roomSettings().doubleRenegade(),config.roomSettings().fixedSeats(),config.roomSettings().bannedHeroes()),config.botStepDelayMillis(),participants.stream().filter(p->p.human && p.control.source()==SeatControl.Source.USER).map(p->p.player.id()).collect(Collectors.toSet()),
-        participants.stream().filter(p->p.human).collect(Collectors.toMap(p->p.player.id(),p->p.control.snapshot(clock.nowMillis(),disconnectGraceMillis))));
+        participants.stream().filter(p->p.human).collect(Collectors.toMap(p->p.player.id(),p->p.control.snapshot(clock.nowMillis(),disconnectGraceMillis))),state.journal().lines());
   }
 
   /** Rebind to fresh endpoints and worker; selected heroes/cards are restored without a new deal. */
@@ -181,6 +182,7 @@ public final class MatchSession implements PromptResponder {
           :saved.turnEnd()?SgsGameEngine.restoreTurnEnd(dev.sgs.core.persistence.TurnEndCheckpointCodec.decode(saved.engine()),saved.contentId(),this,clock)
           :SgsGameEngine.restoreIdle(dev.sgs.core.persistence.IdleEngineCheckpointCodec.decode(saved.engine()),saved.contentId(),this,clock);
       state=engine.state();
+      state.journal().restore(saved.journal());
       for(var seat:state.players()){
         var player=(MatchPlayer)seat;boolean previouslyOnline=player.online();player.setOnline(!player.human() || !awaitingReconnect && endpoints.containsKey(player.id()));
         var participant=new Participant(player,endpoints.getOrDefault(player.id(),MatchEndpoint.NOOP),player.human());
@@ -213,6 +215,13 @@ public final class MatchSession implements PromptResponder {
       if(engine.hasActiveSkillContinuation())driveYieldedActiveSkill();
       if(engine.hasTurnStartContinuation())driveYieldedTurnStart();
       if(engine.hasTurnEndContinuation())driveYieldedTurnEnd();
+      // Restored responses finish outside humanPlayWindow's normal successful-action path.
+      // Once they resolve, the next decision gets a full budget, not the pre-save remainder.
+      if ((saved.attack() || saved.trick() || saved.activeSkill())
+          && state.status() == GameStatus.RUNNING && state.phase() == Phase.PLAY) {
+        restoredWindowDeadline = clock.nowMillis() + config.turnTimeoutSeconds() * 1000L;
+        phaseDeadline = restoredWindowDeadline;
+      }
       runMatch();
     }catch(AbortedException ignored){log("restored match {} abandoned",roomId);}
     catch(RuntimeException failure){restoredReady.completeExceptionally(failure);log("restored match {} failed: {}",roomId,failure);}
@@ -342,7 +351,7 @@ public final class MatchSession implements PromptResponder {
       if(action.nonce()<=previous){rejectIngress(senderId,action,"REPLAY");return;}
       if(counter.compareAndSet(previous,action.nonce()))break;
     }
-    if(action.kind()!=Kind.PLAY_ATTACK_TARGETS && !action.targetSeats().isEmpty()){rejectIngress(senderId,action,"INVALID_CHOICE");return;}
+    if(action.kind()!=Kind.PLAY_ATTACK_TARGETS && !action.targetSeats().isEmpty() && !(action.kind()==Kind.PROMPT_RESPONSE && activePrompt!=null && activePrompt.type()==dev.sgs.core.engine.PromptType.TUXI_TARGET)){rejectIngress(senderId,action,"INVALID_CHOICE");return;}
     var pending=pendingInput;
     if(pending!=null && action.kind()!=Kind.LEAVE){
       if(action.kind()!=Kind.PROMPT_RESPONSE && !(action.kind()==Kind.PASS_WUXIE_SCOPE && pending.allowWuxieScopePass())){rejectIngress(senderId,action,RejectReason.WRONG_PHASE.name());return;}
@@ -455,8 +464,19 @@ public final class MatchSession implements PromptResponder {
       return next;
     }
   }
+  public void queryTargets(UUID player,long epoch,String skill,List<Long> costs,int declared,int primary,java.util.function.Consumer<java.util.Map<Integer,String>> reply){
+    mailbox.submitControl(new MatchMailbox.TargetQuery(player,epoch,skill,List.copyOf(costs),declared,primary,reply));
+  }
   private void handleControl(MatchMailbox.Control control){
     if(stopped){if(control instanceof MatchMailbox.SaveCheckpoint save)save.result().completeExceptionally(new IllegalStateException("session stopped"));return;}
+    if(control instanceof MatchMailbox.TargetQuery query){
+      try{
+      var owner=byId.get(query.playerId());
+      if(owner!=null && owner.connectionEpoch==query.epoch() && engine!=null && activePrompt!=null && activePrompt.asker()==owner.player && activePrompt.type()==dev.sgs.core.engine.PromptType.LIULI_TARGET){query.reply().accept(engine.redirectSelectionTargets(activePrompt,query.costs()));return;}
+      query.reply().accept(owner==null || owner.connectionEpoch!=query.epoch() || engine==null || activePrompt!=null || activeCounterspellWindow!=null?Map.of():engine.selectionTargets(owner.player,query.skill(),query.costs(),query.declared(),query.primary()));
+      }catch(RuntimeException failure){query.reply().accept(Map.of());}
+      return;
+    }
     if(control instanceof MatchMailbox.SaveCheckpoint save){
       if(engine!=null&&!engine.checkpointControlBoundary()&&activePrompt!=null
           &&automatic(byId.get(activePrompt.asker().id()))){
@@ -623,7 +643,7 @@ public final class MatchSession implements PromptResponder {
         .withHeroPresentations(dev.sgs.core.addon.AddonRuntime.current().present(resultIds));
     for(var spectator:List.copyOf(spectators))safeSend(spectator,publicSnapshot);
     for(var p:participants)if(p.human)safeSend(p.endpoint,ViewFilter.selecting(seats,false,p.player.seat(),List.of(),0)
-        .withHeroBan(new dev.sgs.core.match.dto.MatchViews.HeroBanView(heroBanStage,heroBanDeadline,heroBanRound.candidates(),choices))
+        .withHeroBan(new dev.sgs.core.match.dto.MatchViews.HeroBanView(heroBanStage,heroBanDeadline,heroBanStage==0?heroBanRound.availableCandidates():heroBanRound.candidates(),choices))
         .withHeroPresentations(dev.sgs.core.addon.AddonRuntime.current().present(heroBanRound.candidates())));
   }
 
@@ -643,7 +663,7 @@ public final class MatchSession implements PromptResponder {
     }
     for (Participant participant : participants) {
       if (!participant.human && (!lordFirstSelection() || participant.player.seat()==0)) {
-        chooseHero(participant,HeroSelection.timeoutPick(participant.candidates, random));
+        chooseHero(participant,timeoutHero(participant));
       }
     }
     boolean waitingLord=lordChoicePending();
@@ -651,16 +671,16 @@ public final class MatchSession implements PromptResponder {
 
     while (!stopped && humansPending() > 0) {
       serviceControls();
-      for(var p:participants)if(p.heroId==null && automatic(p) && (!waitingLord || p.player.seat()==0))chooseHero(p,HeroSelection.timeoutPick(p.candidates,random));
+      for(var p:participants)if(p.heroId==null && automatic(p) && (!waitingLord || p.player.seat()==0))chooseHero(p,timeoutHero(p));
       if(waitingLord && !lordChoicePending()){
         waitingLord=false;deadline=clock.nowMillis()+config.selectionTimeoutSeconds()*1000L;selectionDeadline=deadline;
-        for(var p:participants)if(p.heroId==null&&automatic(p))chooseHero(p,HeroSelection.timeoutPick(p.candidates,random));
+        for(var p:participants)if(p.heroId==null&&automatic(p))chooseHero(p,timeoutHero(p));
         broadcastSelection(deadline);
       }
       if(humansPending()==0){broadcastSelection(deadline);break;}
       long remaining = deadline - clock.nowMillis();
       if (remaining <= 0L) {
-        if(waitingLord){var lord=participants.getFirst();chooseHero(lord,HeroSelection.timeoutPick(lord.candidates,random));continue;}
+        if(waitingLord){var lord=participants.getFirst();chooseHero(lord,timeoutHero(lord));continue;}
         break;
       }
       Envelope envelope =
@@ -673,7 +693,7 @@ public final class MatchSession implements PromptResponder {
                 return sender != null
                     && sender.human
                     && (e.action().kind()==Kind.BAN_HERO || e.action().kind()==Kind.REVEAL_IDENTITY || e.action().kind()==Kind.CONFIRM_IDENTITY
-                        || sender.heroId==null && e.action().kind()==Kind.SELECT_HERO);
+                        || sender.heroId==null && (e.action().kind()==Kind.SELECT_HERO || e.action().kind()==Kind.PREVIEW_HERO));
               },
               remaining);
       if (envelope == null) {
@@ -688,7 +708,7 @@ public final class MatchSession implements PromptResponder {
         continue;
       }
       if(clock.nowMillis()>=deadline)continue;
-      if(action.kind()!=Kind.SELECT_HERO){sender.endpoint.sendError(action.nonce(),action.kind()==Kind.BAN_HERO?"BAN_FINISHED":"IDENTITY_INTRO_FINISHED");broadcastSelection(deadline);continue;}
+      if(action.kind()!=Kind.SELECT_HERO && action.kind()!=Kind.PREVIEW_HERO){sender.endpoint.sendError(action.nonce(),action.kind()==Kind.BAN_HERO?"BAN_FINISHED":"IDENTITY_INTRO_FINISHED");broadcastSelection(deadline);continue;}
       if(waitingLord && sender.player.seat()!=0){sender.endpoint.sendError(action.nonce(),"WAIT_FOR_LORD");continue;}
       if(config.uniqueHeroSelection(participants.size()) && selectedHeroIds().contains(action.heroId())){
         sender.endpoint.sendError(action.nonce(),"HERO_TAKEN");broadcastSelection(deadline);continue;
@@ -697,13 +717,14 @@ public final class MatchSession implements PromptResponder {
         sender.endpoint.sendError(action.nonce(), "INVALID_HERO");
         continue;
       }
+      if(action.kind()==Kind.PREVIEW_HERO){heroPreviews.put(sender.player.id(),action.heroId());continue;}
       chooseHero(sender,action.heroId());
       if(!waitingLord)broadcastSelection(deadline);
     }
     // Timeout fallback for humans who never chose.
     for (Participant participant : participants) {
       if (participant.heroId == null) {
-        chooseHero(participant,HeroSelection.timeoutPick(participant.candidates, random));
+        chooseHero(participant,timeoutHero(participant));
       }
     }
     broadcastSelection(deadline);
@@ -711,6 +732,11 @@ public final class MatchSession implements PromptResponder {
 
   private java.util.Set<String> selectedHeroIds(){
     return participants.stream().map(p->p.heroId).filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+  }
+  private String timeoutHero(Participant participant){
+    var candidates=participant.candidates.stream().filter(id->!config.uniqueHeroSelection(participants.size()) || !selectedHeroIds().contains(id)).toList();
+    String preview=heroPreviews.get(participant.player.id());
+    return candidates.contains(preview)?preview:HeroSelection.timeoutPick(candidates,random);
   }
   private void chooseHero(Participant participant,String id){
     if(config.uniqueHeroSelection(participants.size()) && selectedHeroIds().contains(id))throw new IllegalStateException("hero already selected");
@@ -849,6 +875,13 @@ public final class MatchSession implements PromptResponder {
   private java.util.Set<Long> physicalIds;
   private long lastConservationAudit=-1;
   private void installSessionObservers(){
+    state.setTableEffectObserver(effect->{
+      if(effect.kind().equals("CARD_USE"))return;
+      // Publish while still inside settlement, before draw/play or the next judgment.
+      broadcast();
+      paceAutomatic(TablePresentationTiming.settlementHoldMillis(effect.kind()));
+      if(stopped)abort();
+    });
     physicalIds=state.cards().zones().stream().flatMap(zone->state.cards().cards(zone).stream())
         .map(CardInstance::instanceId).collect(java.util.stream.Collectors.toUnmodifiableSet());
     if (logSink != null) {
@@ -856,6 +889,11 @@ public final class MatchSession implements PromptResponder {
     }
     engine.addPresentationListener(
         new GameEventListener() {
+          @Override public void onChainReleased(dev.sgs.core.player.SgsPlayer target){
+            broadcast();
+            long beat=Math.min(380,Math.max(0,config.botStepDelayMillis()));
+            if(beat>0)try{Thread.sleep(beat);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new AbortedException();}
+          }
           @Override
           public void onJudgmentFinalized(dev.sgs.core.player.SgsPlayer judge, CardInstance card) {
             onJudgmentRevealed(judge,card);
@@ -929,7 +967,7 @@ public final class MatchSession implements PromptResponder {
         && state.currentPlayer() == current) {
       serviceControls();
       if(automatic(byId.get(current.id())) && clock.nowMillis()<deadline){
-        runAutoPlayStep(current);waitForAction(e->false,Math.max(1,config.botStepDelayMillis()));continue;
+        runAutoPlayStep(current);continue;
       }
       Envelope envelope =
           waitForAction(
@@ -959,6 +997,12 @@ public final class MatchSession implements PromptResponder {
       ActionResult result = dispatchPlay(current, action);
       if (!result.accepted()) {
         sender.endpoint.sendError(action.nonce(), result.reason().name());
+      } else if (state.status() == GameStatus.RUNNING && state.phase() == Phase.PLAY
+          && state.currentPlayer() == current) {
+        // A fresh decision budget starts after the card/skill and all responses resolve.
+        // Invalid actions and replayed packets must never extend the turn.
+        deadline = clock.nowMillis() + config.turnTimeoutSeconds() * 1000L;
+        phaseDeadline = deadline;
       }
       broadcast();
     }
@@ -1004,7 +1048,10 @@ public final class MatchSession implements PromptResponder {
   private ActionResult dispatchDiscard(dev.sgs.core.player.SgsPlayer actor,List<Long> ids,boolean automatic){
     if(!engine.supportsTurnEndContinuation())return automatic?engine.timeoutTurn(actor):engine.confirmDiscard(actor,ids);
     var result=automatic?engine.beginResumableTimeoutDiscard(actor,ids):engine.beginResumableDiscard(actor,ids);
-    if(result.accepted()){phaseDeadline=0;driveYieldedTurnEnd();}return result;
+    if(result.accepted()){
+      if(engine.hasTurnEndContinuation() || state.phase()!=Phase.DISCARD)phaseDeadline=0;
+      driveYieldedTurnEnd();
+    }return result;
   }
   private void dispatchAutoDiscard(dev.sgs.core.player.SgsPlayer actor,boolean timeout){
     int excess=Math.max(0,actor.handCount()-state.handLimit(actor));
@@ -1127,6 +1174,9 @@ public final class MatchSession implements PromptResponder {
   }
 
   private void humanDiscardWindow(dev.sgs.core.player.SgsPlayer current) {
+    if(current.handCount()<=state.handLimit(current)){
+      dispatchDiscard(current,List.of(),false);phaseDeadline=0L;broadcast();return;
+    }
     long deadline = windowDeadline(config.responseTimeoutSeconds());
     phaseDeadline = deadline;
     broadcast();
@@ -1170,7 +1220,7 @@ public final class MatchSession implements PromptResponder {
         sender.endpoint.sendError(action.nonce(), result.reason().name());
         broadcast();
       } else {
-        phaseDeadline = 0L;
+        phaseDeadline = state.currentPlayer()==current && state.phase()==Phase.DISCARD?deadline:0L;
         broadcast();
       }
     }
@@ -1184,12 +1234,14 @@ public final class MatchSession implements PromptResponder {
         && state.currentPlayer() == current) {
       runAutoPlayStep(current);
       broadcast();
-      sleepStep(config.botStepDelayMillis());
+
     }
   }
 
   private void runAutoPlayStep(dev.sgs.core.player.SgsPlayer current){
       serviceControls();if(!automatic(byId.get(current.id())))return;
+      paceAutomatic(config.botStepDelayMillis());
+      if(!automatic(byId.get(current.id())) || stopped)return;
       BotTurnDriver.runPlay(engine,state,current,(card,declared,target,secondary)->dispatchCard(current,
           declared==null?MatchAction.playCard(1,card,target==null?-1:target.seat(),secondary==null?-1:secondary.seat())
               :MatchAction.playCardAs(1,card,declared.ordinal(),target==null?-1:target.seat(),secondary==null?-1:secondary.seat()),declared),
@@ -1214,9 +1266,8 @@ public final class MatchSession implements PromptResponder {
     Participant participant=byId.get(prompt.asker().id());activePrompt=prompt;
     pendingInput=new PendingInput(prompt.id(),prompt.asker().id());broadcast();
     try{
-      if(participant==null || !participant.human)return BotPolicy.INSTANCE.choose(gameState,prompt);
       while(!stopped){
-        serviceControls();if(automatic(participant) && clock.nowMillis()<prompt.deadlineMillis())return BotPolicy.INSTANCE.choose(gameState,prompt);
+        serviceControls();if(readyAutomatic(participant,prompt.deadlineMillis()))return BotPolicy.INSTANCE.choose(gameState,prompt);
         long wait=Math.max(0,prompt.deadlineMillis()-clock.nowMillis());
         Envelope envelope=waitForAction(e->e.senderId().equals(prompt.asker().id())
             && (e.action().kind()==Kind.LEAVE || e.action().kind()==Kind.PROMPT_RESPONSE && e.action().promptId()==prompt.id()),wait);
@@ -1225,8 +1276,23 @@ public final class MatchSession implements PromptResponder {
         if(isReplay(participant,action))continue;
         if(clock.nowMillis()>prompt.deadlineMillis())return Optional.empty();
         if(!action.accept())return Optional.empty();
-        boolean cardAllowed=prompt.allowsHiddenChoice(action.cardId())
-            || prompt.choices().stream().anyMatch(c->c.instanceId()==action.cardId());
+        if(action.deckOrder()!=null){
+          if(prompt.type()!=dev.sgs.core.engine.PromptType.GUANXING_ORDER||action.cardId()!=-1||action.targetSeat()!=-1
+              ||action.secondarySeat()!=-1||action.declaredTypeOrdinal()!=-1||!action.cardIds().isEmpty()||!action.targetSeats().isEmpty()
+              ||!action.deckOrder().matches(prompt.choices().stream().map(CardInstance::instanceId).toList())){
+            participant.endpoint.sendError(action.nonce(),"INVALID_CHOICE");continue;
+          }
+          return Optional.of(dev.sgs.core.engine.SkillChoice.order(action.deckOrder()));
+        }
+        if(prompt.type()==dev.sgs.core.engine.PromptType.TUXI_TARGET){
+          var answer=new dev.sgs.core.engine.SkillChoice(action.cardId(),action.targetSeat(),null,action.targetSeats());
+          if(!answer.validTuxi(prompt.allowedTargetSeats())||action.secondarySeat()!=-1||action.declaredTypeOrdinal()!=-1||!action.cardIds().isEmpty()){
+            participant.endpoint.sendError(action.nonce(),"INVALID_CHOICE");continue;
+          }
+          return Optional.of(answer);
+        }
+        boolean cardAllowed=action.targetSeats().isEmpty() && (prompt.allowsHiddenChoice(action.cardId())
+            || prompt.choices().stream().anyMatch(c->c.instanceId()==action.cardId()));
         boolean targetAllowed=prompt.allowedTargetSeats().isEmpty()?action.targetSeat()==-1:prompt.allowedTargetSeats().contains(action.targetSeat());
         if(!cardAllowed || !targetAllowed || action.secondarySeat()!=-1 || action.declaredTypeOrdinal()!=-1 || !action.cardIds().isEmpty()){
           participant.endpoint.sendError(action.nonce(),"INVALID_CHOICE");continue;
@@ -1242,9 +1308,8 @@ public final class MatchSession implements PromptResponder {
     Participant participant=byId.get(prompt.asker().id());activePrompt=prompt;
     pendingInput=new PendingInput(prompt.id(),prompt.asker().id());broadcast();
     try{
-      if(participant==null || !participant.human)return BotPolicy.INSTANCE.chooseSuit(gameState,prompt);
       while(!stopped){
-        serviceControls();if(automatic(participant) && clock.nowMillis()<prompt.deadlineMillis())return BotPolicy.INSTANCE.chooseSuit(gameState,prompt);
+        serviceControls();if(readyAutomatic(participant,prompt.deadlineMillis()))return BotPolicy.INSTANCE.chooseSuit(gameState,prompt);
         long wait=Math.max(0,prompt.deadlineMillis()-clock.nowMillis());
         Envelope envelope=waitForAction(e->e.senderId().equals(prompt.asker().id())
             && (e.action().kind()==Kind.LEAVE || (e.action().kind()==Kind.PROMPT_RESPONSE && e.action().promptId()==prompt.id())),wait);
@@ -1265,9 +1330,8 @@ public final class MatchSession implements PromptResponder {
   @Override public boolean invoke(GameState gameState,PromptRequest prompt){
     Participant participant=byId.get(prompt.asker().id());activePrompt=prompt;pendingInput=new PendingInput(prompt.id(),prompt.asker().id());broadcast();
     try{
-      if(participant==null || !participant.human)return BotPolicy.INSTANCE.invoke(gameState,prompt);
       while(!stopped){
-        serviceControls();if(automatic(participant) && clock.nowMillis()<prompt.deadlineMillis())return BotPolicy.INSTANCE.invoke(gameState,prompt);
+        serviceControls();if(readyAutomatic(participant,prompt.deadlineMillis()))return BotPolicy.INSTANCE.invoke(gameState,prompt);
         long wait=Math.max(0,prompt.deadlineMillis()-clock.nowMillis());
         Envelope envelope=waitForAction(e->e.senderId().equals(prompt.asker().id())
             && (e.action().kind()==Kind.LEAVE || (e.action().kind()==Kind.PROMPT_RESPONSE
@@ -1313,7 +1377,7 @@ public final class MatchSession implements PromptResponder {
     try{
       log("match {} counterspell window opened: window={} subject={} depth={} deadline={} invited={}",roomId,window.windowId(),window.subjectSeat(),window.chainDepth(),window.deadlineMillis(),window.requests().size());
       broadcast(); // Real invitations precede every AI proposal.
-      long aiDelay=Math.min(350,Math.max(1,(window.deadlineMillis()-clock.nowMillis())/4));
+      long aiDelay=Math.min(config.botStepDelayMillis(),Math.max(0,window.deadlineMillis()-clock.nowMillis()-1));
       long aiDue=Math.min(window.deadlineMillis(),clock.nowMillis()+aiDelay);boolean aiProcessed=false;
       while(!stopped && !window.closed() && !window.expired()){
         long now=clock.nowMillis();long wait=Math.max(0,Math.min(window.deadlineMillis()-now,aiProcessed?Long.MAX_VALUE:aiDue-now));
@@ -1342,7 +1406,7 @@ public final class MatchSession implements PromptResponder {
           for(var prompt:bots){
             serviceControls();if(!automatic(byId.get(prompt.asker().id())))continue;
             if(window.closed() || window.expired())break;
-            var decision=BotPolicy.INSTANCE.respond(gameState,prompt);
+            var decision=BotPolicy.INSTANCE.counterspell(gameState,prompt,window.effectType(),window.chainDepth());
             var receipt=window.offer(prompt.asker().id(),prompt.id(),PromptResponder.WuxieResponse.answer(decision));
             if(receipt==dev.sgs.core.engine.CounterspellWindow.Receipt.INVALID)window.offer(prompt.asker().id(),prompt.id(),PromptResponder.WuxieResponse.decline());
           }
@@ -1371,11 +1435,14 @@ public final class MatchSession implements PromptResponder {
     broadcast();
     try {
       serviceControls();
-      if (automatic(participant)) {
-        return PromptResponder.WuxieResponse.answer(BotPolicy.INSTANCE.respond(gameState, prompt));
-      }
       while (!stopped) {
-        serviceControls();if(automatic(participant) && clock.nowMillis()<prompt.deadlineMillis())return PromptResponder.WuxieResponse.answer(BotPolicy.INSTANCE.respond(gameState,prompt));
+        serviceControls();
+        if(automatic(participant) && clock.nowMillis()<prompt.deadlineMillis()){
+          var proposed=BotPolicy.INSTANCE.respond(gameState,prompt);
+          long delay=responsePacingMillis(config.botStepDelayMillis(),prompt.type(),proposed.isPresent());
+          if(readyAutomatic(participant,prompt.deadlineMillis(),delay))
+            return PromptResponder.WuxieResponse.answer(BotPolicy.INSTANCE.respond(gameState,prompt));
+        }
         long wait = Math.max(prompt.deadlineMillis() - clock.nowMillis(), 0L);
         Envelope envelope =
             waitForAction(
@@ -1539,6 +1606,33 @@ public final class MatchSession implements PromptResponder {
     }
     lastNonceByPlayer.put(participant.player.id(), (long) action.nonce());
     return false;
+  }
+
+  private boolean readyAutomatic(Participant participant,long deadline){
+    return readyAutomatic(participant,deadline,config.botStepDelayMillis());
+  }
+
+  /** Routine replies are a short beat; turn planning, rescue and shared counterspell grace remain unchanged. */
+  static long responsePacingMillis(long configured,dev.sgs.core.engine.PromptType type,boolean answering){
+    return switch(type){
+      case DODGE_SHA,DUEL_SHA,RESPOND_SHA_NANMAN,HUJIA_SHAN,JIJIANG_SHA,QINGLONG_SHA,JIEDAO_RESPONSE,HUOGONG_REVEAL,HUOGONG_PAY ->
+          Math.min(configured,answering?380L:180L);
+      default -> configured;
+    };
+  }
+
+  private boolean readyAutomatic(Participant participant,long deadline,long delay){
+    if(!automatic(participant) || clock.nowMillis()>=deadline)return false;
+    paceAutomatic(Math.min(delay,Math.max(0,deadline-clock.nowMillis()-1)));
+    return !stopped && automatic(participant) && clock.nowMillis()<deadline;
+  }
+
+  private void paceAutomatic(long millis){
+    // Use monotonic wall time so frozen deterministic game clocks cannot deadlock pacing.
+    long end=System.nanoTime()+Math.max(0,millis)*1_000_000L;
+    while(!stopped){long left=(end-System.nanoTime())/1_000_000L;if(left<=0)break;
+      sleepStep(Math.min(50,left));serviceControls();
+    }
   }
 
   private void sleepStep(long millis) {

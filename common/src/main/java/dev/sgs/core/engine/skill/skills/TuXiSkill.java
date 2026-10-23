@@ -4,7 +4,7 @@ import dev.sgs.core.engine.SkillChoice;
 import dev.sgs.core.engine.skill.*;
 import dev.sgs.core.player.SgsPlayer;
 import java.util.*;
-/** Standard Tuxi replaces the complete normal draw with one hand card from up to two others. */
+/** Tuxi replaces each chosen draw with one hand card from a different target. */
 public final class TuXiSkill implements AwaitableRuleEffect {
   private final SgsPlayer owner;private final SkillEngine api;
   public TuXiSkill(SgsPlayer owner,SkillEngine api){this.owner=owner;this.api=api;}
@@ -19,25 +19,24 @@ public final class TuXiSkill implements AwaitableRuleEffect {
   }
   public Progress completeRule(SkillContext c,Progress p,Optional<SkillChoice> choice){
     if(choice.isEmpty())return new Progress(p.value(),p.selected(),p.took(),true);
-    int seat=choice.get().targetSeat();if(!candidates(c,p.selected()).contains(seat)||p.selected().size()>=2)throw new IllegalArgumentException("invalid Tuxi target");
-    var chosen=new ArrayList<>(p.selected());chosen.add(seat);boolean took=take(c,seat);
-    return new Progress(p.value(),chosen,p.took()||took,false);
+    var answer=choice.get();var allowed=candidates(c,p.selected());
+    if(!answer.validTuxi(allowed)||p.selected().size()+answer.selectedTargets().size()>2)throw new IllegalArgumentException("invalid Tuxi targets");
+    var chosen=new ArrayList<>(p.selected());
+    for(int seat:answer.selectedTargets())if(take(c,seat))chosen.add(seat);
+    return new Progress(p.value(),chosen,!chosen.isEmpty(),true);
   }
-  public int finishRule(SkillContext c,Progress p){if(p.took()){c.state().publishSkillActivation(owner.seat(),id());return 0;}return p.value();}
+  public int finishRule(SkillContext c,Progress p){
+    if(p.took())c.state().publishSkillActivation(owner.seat(),id());
+    return Math.max(0,p.value()-p.selected().size());
+  }
   public void validateRuleProgress(SkillContext c,Progress p){
     if(p.selected().size()>2||p.selected().contains(owner.seat())||p.took()!=!p.selected().isEmpty()
         ||p.selected().stream().anyMatch(s->s>=c.state().players().size()))throw new IllegalArgumentException("invalid Tuxi progress");
   }
   public int modifyInt(SkillContext c,int count){
-    var selected=new HashSet<Integer>();boolean took=false;
-    for(int i=0;i<2 && owner.alive();i++){
-      var candidates=candidates(c,selected);
-      if(candidates.isEmpty())break;
-      var choice=api.requestSkillChoice(owner,owner,PromptType.TUXI_TARGET,id(),List.of(),candidates,true);
-      if(choice.isEmpty())break;
-      var source=c.state().players().get(choice.get().targetSeat());selected.add(source.seat());
-      if(take(c,source.seat()))took=true;
-    }
-    if(took){c.state().publishSkillActivation(owner.seat(),id());return 0;}return count;
+    var p=beginRule(count);var request=nextRule(c,p);
+    if(request==null)return count;
+    var choice=api.requestSkillChoice(owner,owner,PromptType.TUXI_TARGET,id(),List.of(),request.targets(),true);
+    return finishRule(c,completeRule(c,p,choice));
   }
 }

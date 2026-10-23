@@ -28,6 +28,7 @@ public final class MatchCheckpointCodec {
           out.writeUTF(c.source().name());out.writeLong(c.version());out.writeBoolean(c.awaitingReconnect());out.writeLong(c.offlineRemainingMillis());
         }
       }
+      if(saved.version()>=4){out.writeInt(saved.journal().size());for(var line:saved.journal())out.writeUTF(line);}
       out.flush();var data=bytes.toByteArray();if(data.length+32>MAX)throw new IllegalArgumentException("match checkpoint too large");
       bytes.write(digest(data));return bytes.toByteArray();
     }catch(IOException error){throw new IllegalArgumentException("cannot encode match checkpoint",error);}
@@ -64,8 +65,10 @@ public final class MatchCheckpointCodec {
           if(controls.put(id,c)!=null)throw new IllegalArgumentException("duplicate seat control");
         }
       }
+      var journal=new ArrayList<String>();
+      if(version>=4){int amount=in.readInt();if(amount<0 || amount>dev.sgs.core.game.MatchJournal.MAX_LINES)throw new IllegalArgumentException("bad journal count");for(int i=0;i<amount;i++)journal.add(in.readUTF());}
       if(in.available()!=0)throw new IllegalArgumentException("trailing match checkpoint bytes");
-      return new MatchCheckpoint(version,room,content,attack,engine,remaining,sharing,nonces,settings,botDelay,autoplay,controls);
+      return new MatchCheckpoint(version,room,content,attack,engine,remaining,sharing,nonces,settings,botDelay,autoplay,controls,journal);
     }catch(IOException error){throw new IllegalArgumentException("invalid match checkpoint",error);}
   }
   private static byte[] digest(byte[] data){

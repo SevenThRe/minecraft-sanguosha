@@ -16,7 +16,7 @@ final class FireAttackRule {
     return ActionResult.ok();
   }
   static void resolve(SgsGameEngine engine,SgsPlayer source,SgsPlayer target,GameCard cause){
-    var state=engine.state();if(engine.isCounteredByWuxie(target) || !source.alive() || !target.alive() || target.handCount()==0)return;
+    var state=engine.state();if(engine.isCounteredByWuxie(target,dev.sgs.core.card.CardType.HUOGONG) || !source.alive() || !target.alive() || target.handCount()==0)return;
     var allTypes=List.of(CardType.values());
     var reveal=new PromptRequest(engine.nextPromptId(),PromptType.HUOGONG_REVEAL,target,source,allTypes,List.of(),engine.responseDeadlineMillis(),"huogong");
     var choice=engine.ask(reveal);

@@ -40,6 +40,9 @@ public interface PlannedActiveSkill extends ActiveSkill {
     return current.accepted()&&plan.equals(current.plan());
   }
 
+  @Override default SkillResult preview(SkillEngine api,SgsPlayer actor,SgsPlayer target,List<CardInstance> cards){
+    var p=prepare(api,actor,target,cards);return p.accepted()?SkillResult.ok():SkillResult.reject(p.rejection());
+  }
   @Override default SkillResult activate(SkillEngine api,SgsPlayer actor,SgsPlayer target,List<CardInstance> costs) {
     var preparation=prepare(api,actor,target,costs);
     if(!preparation.accepted())return SkillResult.reject(preparation.rejection());
@@ -63,12 +66,12 @@ public interface PlannedActiveSkill extends ActiveSkill {
     if(choice.isEmpty())return SkillResult.reject("selection_cancelled");
     if(!plan.allows(choice.get())||!stillPrepared(api,plan))return SkillResult.reject("stale_selection");
     var source=api.gameState().players().get(choice.get().targetSeat());
-    if(!api.canSkillDuel(source,target))return SkillResult.reject("illegal_duel_target");
+    if(!api.canSkillDuel(target,source))return SkillResult.reject("illegal_duel_target");
     var payment=plan.ownedCosts(api).orElseThrow();
     commitUse(api,plan);
     api.discardCards(actor,payment);
     if(source.alive()&&target.alive()) {
-      switch(plan.effect()) {case UNCOUNTERABLE_DUEL->api.useSkillDuel(source,target);case LOSE_HP_DRAW,PROVIDED_ATTACK,REVEALED_GIFT->throw new IllegalStateException("wrong active effect branch");}
+      switch(plan.effect()) {case UNCOUNTERABLE_DUEL->api.useSkillDuel(target,source);case LOSE_HP_DRAW,PROVIDED_ATTACK,REVEALED_GIFT->throw new IllegalStateException("wrong active effect branch");}
     }
     effectCompleted(api,plan);
     return SkillResult.ok();

@@ -21,6 +21,7 @@ public final class TrickContinuation {
   }
   public record Family(List<Integer> targets,int cursor,boolean revealed,List<Long> harvest,int duelResponder,int duelOther,int duelRequired,int duelPaid,
       TrickResponseContinuation.Snapshot response,AttackContinuation.Snapshot damage,YiJiContinuation.Snapshot yiji,GangLieContinuation.Snapshot ganglie,List<DamageParentSnapshot> parents,boolean movementPrepared,boolean feedbackTaken,boolean penaltyLogPending,DamageProgramContinuation.Snapshot program,RevealCostContinuation.Snapshot revealCost,StrikeContinuation.Snapshot strike,MovementListenerProgram.Snapshot movementProgram){
+
     public Family(List<Integer> targets,int cursor,boolean revealed,List<Long> harvest,int responder,int other,int required,int paid,TrickResponseContinuation.Snapshot response,AttackContinuation.Snapshot damage,YiJiContinuation.Snapshot yiji,GangLieContinuation.Snapshot ganglie,List<DamageParentSnapshot> parents,boolean prepared,boolean taken,boolean penalty,DamageProgramContinuation.Snapshot program,RevealCostContinuation.Snapshot reveal,StrikeContinuation.Snapshot strike){this(targets,cursor,revealed,harvest,responder,other,required,paid,response,damage,yiji,ganglie,parents,prepared,taken,penalty,program,reveal,strike,null);}
     public Family(List<Integer> targets,int cursor,boolean revealed,List<Long> harvest,int responder,int other,int required,int paid,TrickResponseContinuation.Snapshot response,AttackContinuation.Snapshot damage,YiJiContinuation.Snapshot yiji,GangLieContinuation.Snapshot ganglie,List<DamageParentSnapshot> parents,boolean prepared,boolean taken,boolean penalty,DamageProgramContinuation.Snapshot program,RevealCostContinuation.Snapshot reveal){this(targets,cursor,revealed,harvest,responder,other,required,paid,response,damage,yiji,ganglie,parents,prepared,taken,penalty,program,reveal,null);}
     public Family(List<Integer> targets,int cursor,boolean revealed,List<Long> harvest,int responder,int other,int required,int paid,TrickResponseContinuation.Snapshot response,AttackContinuation.Snapshot damage,YiJiContinuation.Snapshot yiji,GangLieContinuation.Snapshot ganglie,List<DamageParentSnapshot> parents,boolean prepared,boolean taken,boolean penalty,DamageProgramContinuation.Snapshot program){this(targets,cursor,revealed,harvest,responder,other,required,paid,response,damage,yiji,ganglie,parents,prepared,taken,penalty,program,null);}
@@ -54,9 +55,10 @@ public final class TrickContinuation {
   void deferLordPenaltyLog(){penaltyLogPending=true;}
   TrickContinuation(SgsGameEngine e,int source,int target,long cardId,CardType type){this(e,source,target,cardId,type,null);}
   TrickContinuation(SgsGameEngine e,int source,int target,long cardId,CardType type,List<Integer> selected){this.source=source;this.target=target;this.cardId=cardId;this.type=type;
-    targets=(type==CardType.TAOYUAN || type==CardType.WUGU)?e.state().alivePlayersFromSeat(source).stream().map(SgsPlayer::seat).toList():
+    targets=(type==CardType.ZHULU || type==CardType.TAOYUAN || type==CardType.WUGU)?e.state().alivePlayersFromSeat(source).stream().map(SgsPlayer::seat).toList():
         (type==CardType.NANMAN || type==CardType.WANJIAN)?e.state().alivePlayersAfter(source).stream().map(SgsPlayer::seat).toList():List.of(target);
     if(selected!=null)targets=List.copyOf(selected);
+    if(type==CardType.ZHULU)targets=targets.stream().filter(seat->e.cardTargetAllowed(player(e,source),player(e,seat),card(e))).toList();
     if(!targets.isEmpty())this.target=targets.getFirst();
   }
   TrickContinuation(SgsGameEngine engine,Snapshot saved,long captured,long now){
@@ -74,7 +76,7 @@ public final class TrickContinuation {
     if(pending!=null)pending=new Pending(pending.id(),pending.type(),pending.asker(),pending.subject(),shift(pending.deadline(),captured,now),pending.choices(),pending.hidden(),pending.skill(),pending.revision());
     if(saved.window()!=null){var w=saved.window();long deadline=shift(w.deadline(),captured,now);
       var requests=w.tokens().stream().map(t->new PromptRequest(t.id(),PromptType.WUXIE_COUNTER,player(engine,t.seat()),player(engine,w.subject()),List.of(CardType.WUXIE),deadline)).toList();
-      window=new CounterspellWindow(w.id(),w.subject(),w.depth(),deadline,requests,engine::continuationNow,engine::trickValidateResponse);
+      window=new CounterspellWindow(w.id(),w.subject(),w.depth(),deadline,requests,engine::continuationNow,engine::trickValidateResponse).withEffect(type);
       window.restoreProgress(Set.copyOf(w.pending()),Set.copyOf(w.passed()));
     }
   }
@@ -147,10 +149,12 @@ public final class TrickContinuation {
         case PRIMARY_COMMIT->{if(jizhi(e,source)){awaitInvoke(e,source);return;}e.trickCommit(player(e,source),card(e));step=Step.TARGET_START;}
         case COUNTER_COMMIT->{var cost=counters.getLast();if(jizhi(e,cost.seat())){awaitInvoke(e,cost.seat());return;}e.trickCommit(player(e,cost.seat()),physical(e,cost.cardId()));afterCounterCommit(e,cost.seat());}
         case TARGET_START->{
-          if(e.state().status()!=dev.sgs.core.GameStatus.RUNNING || cursor>=targets.size() || type==CardType.WUGU&&revealed&&harvest.isEmpty()){step=Step.CLEANUP;continue;}
-          if(type==CardType.WUGU&&!revealed){revealed=true;harvest.addAll(e.state().cards().drawTo(CardZone.PROCESSING,e.state().alivePlayers().size(),CardMove.Reason.REVEAL,source,true).stream().map(CardInstance::instanceId).toList());continue;}
-          target=targets.get(cursor);if(!player(e,target).alive()){cursor++;continue;}
+          if(e.state().status()!=dev.sgs.core.GameStatus.RUNNING || cursor>=targets.size() || (type==CardType.WUGU||type==CardType.ZHULU)&&revealed&&harvest.isEmpty()){step=Step.CLEANUP;continue;}
+          if(type==CardType.ZHULU&&!revealed){revealed=true;harvest.addAll(ZhuluRules.reveal(e,source,targets.size()).stream().map(CardInstance::instanceId).toList());continue;}
+          if(type==CardType.WUGU&&!revealed){revealed=true;harvest.addAll(e.state().cards().drawTo(CardZone.PROCESSING,e.state().alivePlayers().size(),CardMove.Reason.REVEAL,source,true).stream().map(CardInstance::instanceId).toList());e.state().beginDraft(cardId,source,"五谷丰登",harvest.stream().map(id->physical(e,id)).toList());continue;}
+          target=targets.get(cursor);if(!player(e,target).alive() || !e.cardTargetAllowed(player(e,source),player(e,target),card(e))){cursor++;continue;}
           if((type==CardType.NANMAN||type==CardType.WANJIAN) && player(e,target).equipment().armor()!=null && player(e,target).equipment().armor().type()==CardType.TENGJIA){e.state().log("seat {} tengjia nullifies aoe",target);cursor++;continue;}
+          e.state().journal().add(e.state().journal().seat(source)+"对"+e.state().journal().seat(target)+"结算"+dev.sgs.core.game.MatchJournal.type(type));
           depth=0;step=Step.COUNTER;
         }
         case TARGET_NEXT->{cursor++;step=Step.TARGET_START;}
@@ -159,16 +163,17 @@ public final class TrickContinuation {
           // Keep the persisted token ring stable; the owning session prunes ineligible seats before publishing.
           var requests=e.state().alivePlayersFromSeat(subject).stream().filter(p->!passed.contains(p.seat())).map(p->new PromptRequest(e.nextPromptId(),PromptType.WUXIE_COUNTER,p,player(e,subject),List.of(CardType.WUXIE),deadline)).toList();
           if(requests.isEmpty()){finishCounters(e);continue;}
-          window=new CounterspellWindow(id,subject,depth,deadline,requests,e::continuationNow,e::trickValidateResponse);return;
+          window=new CounterspellWindow(id,subject,depth,deadline,requests,e::continuationNow,e::trickValidateResponse).withEffect(type);return;
         }
         case EFFECT->{
           if(type==CardType.JIEDAO){step=Step.STRIKE;continue;}
 
-          if(type==CardType.WUZHONG){var drawn=e.drawCards(player(e,source),2);e.state().log("seat {} drew {} cards from wuzhong",source,drawn.size());step=Step.TARGET_NEXT;}
+          if(type==CardType.JIEJIA){ZhuluRules.disarm(e,source,target);step=Step.TARGET_NEXT;}
+          else if(type==CardType.WUZHONG){var drawn=e.drawCards(player(e,source),2);e.state().log("seat {} drew {} cards from wuzhong",source,drawn.size());step=Step.TARGET_NEXT;}
           else if(type==CardType.TIESUO){e.state().setChained(target,!e.state().chained(target));e.state().log("seat {} chain state {}",target,e.state().chained(target));step=Step.TARGET_NEXT;}
           else if(type==CardType.HUOGONG){revealCost=new RevealCostContinuation(source,target);step=Step.REVEAL_COST;}
           else if(type==CardType.TAOYUAN){var who=player(e,target);if(who.hp()<who.maxHp()){who.setHp(who.hp()+1);e.state().log("seat {} healed 1 from taoyuan",target);}step=Step.TARGET_NEXT;}
-          else if(type==CardType.WUGU){revision++;pending=new Pending(e.nextPromptId(),PromptType.WUGU_PICK,target,source,e.responseDeadlineMillis(),harvest,false,"",revision);step=Step.CHOICE;return;}
+          else if(type==CardType.WUGU||type==CardType.ZHULU){e.state().draftPicker(target);revision++;pending=new Pending(e.nextPromptId(),PromptType.WUGU_PICK,target,source,e.responseDeadlineMillis(),harvest,false,type==CardType.ZHULU?"zhulu":"",revision);step=Step.CHOICE;return;}
           else if(type==CardType.NANMAN||type==CardType.WANJIAN){response=new TrickResponseContinuation(target,source,type==CardType.NANMAN?PromptType.RESPOND_SHA_NANMAN:PromptType.DODGE_SHA);step=Step.RESPONSE;}
           else if(type==CardType.JUEDOU){
             if(!duel.started())duel=DuelExchange.start(source,target);
@@ -205,7 +210,7 @@ public final class TrickContinuation {
         case CLEANUP->{
           if(revealCost!=null&&revealCost.snapshot().shown()>0)e.state().completeCardReveal("huogong",target,source,revealCost.snapshot().shown());
           if(!harvest.isEmpty()){var remaining=harvest.stream().map(id->physical(e,id)).filter(c->CardZone.PROCESSING.equals(e.state().cards().locate(c.instanceId()))).toList();e.state().cards().move(remaining,CardZone.PROCESSING,CardZone.DISCARD,CardMove.Reason.FINISH,source);harvest.clear();}
-          e.state().cards().finish(card(e),source);e.trickPlayedLog(source,card(e));step=Step.DONE;continue;}
+          if(type==CardType.WUGU){e.state().finishDraft();}e.state().cards().finish(card(e),source);e.trickPlayedLog(source,card(e));step=Step.DONE;continue;}
         case DONE->{return;}
       }
     }
@@ -242,7 +247,8 @@ public final class TrickContinuation {
     if(strikeInput()){if(!strike.respond(e,answer))return false;revision++;return true;}
     if(pending!=null&&pending.type()==PromptType.WUGU_PICK){
       var picked=answer.isEmpty()?physical(e,harvest.getFirst()):answer.get().card().sourceCards().getFirst();if(!harvest.remove(picked.instanceId()))return false;
-      e.state().cards().move(List.of(picked),CardZone.PROCESSING,CardZone.hand(target),CardMove.Reason.EFFECT_GAIN,target);e.state().log("seat {} picked {} from wugu",target,picked.cardId());pending=null;revision++;step=Step.TARGET_NEXT;return true;
+      if(type==CardType.ZHULU)ZhuluRules.equip(e,target,picked);
+      else {e.state().cards().move(List.of(picked),CardZone.PROCESSING,CardZone.hand(target),CardMove.Reason.EFFECT_GAIN,target);e.state().log("seat {} picked {} from wugu",target,picked.cardId());}e.state().claimDraft(picked.instanceId(),target);pending=null;revision++;step=Step.TARGET_NEXT;return true;
     }
     if(revealCost!=null&&revealCost.prompt(e).isPresent()){if(!revealCost.answer(e,answer))return false;revision++;return true;}
     revision++;if(response!=null)return response.answer(e,answer);return damageProgram!=null&&damageProgram.respond(e,answer);

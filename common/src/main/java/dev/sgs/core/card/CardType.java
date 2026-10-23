@@ -66,7 +66,10 @@ public enum CardType {
   BAIYIN("baiyin", ARMOR),
   HUOGONG("huogong", TRICK),
   BINGLIANG("bingliang", DELAYED_TRICK),
-  HUALIU("hualiu", HORSE_PLUS);
+  HUALIU("hualiu", HORSE_PLUS),
+  JIEJIA("jiejia", TRICK),
+  ZHULU("zhulu", TRICK),
+  YEXINGYI("yexingyi", ARMOR);
 
   private final String id;
   private final CardCategory category;

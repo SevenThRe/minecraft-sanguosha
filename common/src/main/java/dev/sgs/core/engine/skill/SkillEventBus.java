@@ -102,7 +102,7 @@ public final class SkillEventBus {
     dispatchDepth++;
     try {
     trigger(timing, ctx, OrderStrategy.REGISTRATION_PRIORITY);
-
+  
     } catch(RuntimeException|Error failure){faulted=true;throw failure;}
     finally{dispatchDepth--;}
   }
@@ -279,6 +279,11 @@ public final class SkillEventBus {
         else stage=PreparationProgram.Step.COMPLETE;
       }else if(stage==PreparationProgram.Step.ORDER){
         if(choice.isEmpty())stage=PreparationProgram.Step.RETURN;
+        else if(choice.get().deckOrder()!=null){
+          var answer=choice.get().deckOrder();if(!answer.matches(order.pending()))throw new IllegalArgumentException("private order partition differs");
+          var top=new ArrayList<>(order.top());top.addAll(answer.top());var bottom=new ArrayList<>(order.bottom());bottom.addAll(answer.bottom());
+          order=new PreparationProgram.Order(order.original(),List.of(),top,bottom);stage=PreparationProgram.Step.RETURN;
+        }
         else{
           var answer=choice.get();if(!order.pending().contains(answer.cardId())||answer.targetSeat()<0||answer.targetSeat()>1)throw new IllegalArgumentException("private order choice differs");
           var remaining=new ArrayList<>(order.pending());remaining.remove(answer.cardId());var top=new ArrayList<>(order.top());var bottom=new ArrayList<>(order.bottom());
@@ -532,7 +537,7 @@ public final class SkillEventBus {
       }
     }
     return value;
-
+  
     } catch(RuntimeException|Error failure){faulted=true;throw failure;}
     finally{dispatchDepth--;}
   }

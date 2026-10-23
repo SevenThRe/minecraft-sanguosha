@@ -21,7 +21,7 @@ public final class FeedbackService {
     if(!server.isSameThread())throw new IllegalStateException("match ledger needs server thread");
     var data=FeedbackData.get(server);long id=data.ledger().allocateMatchId(System.currentTimeMillis());
     data.ledger().begin(id,capacity,humans);data.persist(server);
-
+    if(Boolean.getBoolean("sgs.giftSmoke"))GiftService.seedSmoke(server,id,humans);
     return id;
   }
   /** Called from the same server-thread delivery queue as the real engine snapshots. */
@@ -46,14 +46,14 @@ public final class FeedbackService {
     data.persist(server);
     ProbeMod.LOG.info("SGS_SETTLEMENT_SAVED match={} humans={} rule={}",matchId,awarded.size(),MatchLedger.REWARD_RULE);
     for(var receipt:awarded){var online=server.getPlayerList().getPlayer(receipt.player());
-      dev.sgs.validation.collection.CollectionService.reward(server,receipt.receiptId(),receipt.player());
+      dev.sgs.validation.collection.CollectionService.reward(server,receipt,data.ledger().match(receipt.matchId()));
       if(online!=null)send(online,new FeedbackNetwork.Result(0,"SETTLEMENT",true,"OK",matchId,FeedbackNetwork.RewardView.of(receipt)));
     }
   }
   public static void onLogin(ServerPlayer player){
     var server=player.getServer();if(!server.isSameThread()){server.execute(()->onLogin(player));return;}
     try{var data=FeedbackData.get(server);for(var receipt:data.ledger().snapshot().receipts())if(receipt.player().equals(player.getUUID()))
-      dev.sgs.validation.collection.CollectionService.reward(server,receipt.receiptId(),receipt.player());
+      dev.sgs.validation.collection.CollectionService.reward(server,receipt,data.ledger().match(receipt.matchId()));
     }catch(RuntimeException error){ProbeMod.LOG.error("SGS ledger load blocked; preserving world data",error);}
   }
   public static void submit(ServerPlayer player,FeedbackNetwork.Intent packet){

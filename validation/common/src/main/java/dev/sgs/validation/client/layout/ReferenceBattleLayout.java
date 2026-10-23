@@ -21,18 +21,14 @@ public record ReferenceBattleLayout(int width,int height,float unit,int offsetX,
         return box(15+(index%2)*70,731+(index/2)*64,60,60);
     }
     public Box notice(){return box(526,338,622,40);}
-    /** Opponent slots run left -> upper-left -> upper-right; the next seat is upper-right. */
-    public static int fourPlayerOpponentIndex(int seat,int viewer){
-        if(seat<0 || seat>=4 || viewer<0 || viewer>=4 || seat==viewer)
-            throw new IllegalArgumentException("Expected distinct four-player seats");
-        return Math.floorMod(viewer-seat,4)-1;
+    /** Slots run from the viewer's previous seat on the left to the next seat on the right. */
+    public static int opponentIndex(int seat,int viewer,int count){
+        if(count<2 || seat<0 || seat>=count || viewer<0 || viewer>=count || seat==viewer)
+            throw new IllegalArgumentException("Expected distinct seats within the table");
+        return Math.floorMod(viewer-seat,count)-1;
     }
-    /** Left middle -> five top slots -> right middle. Viewer+1 is immediately above self. */
-    public static int eightPlayerOpponentIndex(int seat,int viewer){
-        if(seat<0 || seat>=8 || viewer<0 || viewer>=8 || seat==viewer)
-            throw new IllegalArgumentException("Expected distinct eight-player seats");
-        return Math.floorMod(viewer-seat,8)-1;
-    }
+    public static int fourPlayerOpponentIndex(int seat,int viewer){return opponentIndex(seat,viewer,4);}
+    public static int eightPlayerOpponentIndex(int seat,int viewer){return opponentIndex(seat,viewer,8);}
     public Box opponent(int index,int count){
         if(count==7){
             if(index<0 || index>=7)throw new IllegalArgumentException("Eight-player opponent slot");

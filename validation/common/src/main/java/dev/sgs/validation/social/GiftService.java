@@ -72,7 +72,11 @@ public final class GiftService {
     }
     private static void send(ServerPlayer p,GiftNetwork.Result r){Balm.getNetworking().sendTo(p,new GiftNetwork.Response(FeedbackNetwork.JSON.toJson(r)));}
     public static void stopAll(){for(var db:DATABASES.values())try{db.close();}catch(Exception e){ProbeMod.LOG.error("Gift database close failed",e);}DATABASES.clear();WINDOWS.clear();GiftPackService.stop();}
-
+    public static void seedSmoke(MinecraftServer server,long match,List<UUID> humans){
+        if(!Boolean.getBoolean("sgs.giftSmoke"))throw new IllegalStateException("test grants disabled");
+        try{for(var id:humans)database(server).grant("smoke-"+match+"-"+id,id,25);}
+        catch(Exception e){throw new IllegalStateException("gift smoke seed failed",e);}
+    }
     public static void initializeCommands(){
         Balm.getCommands().register(dispatcher->dispatcher.register(net.minecraft.commands.Commands.literal("sgsgift").requires(s->s.hasPermission(2))
             .then(net.minecraft.commands.Commands.literal("grant")

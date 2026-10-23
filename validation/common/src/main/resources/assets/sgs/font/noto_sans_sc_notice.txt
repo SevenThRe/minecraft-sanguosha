@@ -1,0 +1,4 @@
+SGS UI Sans Medium, derived from Noto Sans SC variable font at weight 500.
+Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name Source.
+Licensed under SIL Open Font License 1.1; see noto_sans_sc_ofl.txt.
+Modification: fixed static TrueType glyf instance for Minecraft font provider.

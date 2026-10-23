@@ -11,8 +11,10 @@ import java.util.*;
 /** Authoritative rules data, never a client view. No engine frame/skill/transport state implied. */
 public record StateCheckpoint(int version,String contentVersion,GameState.TurnState turn,
     List<Player> players,List<Zone> zones,Set<Long> faceUpProcessing,long movementSequence,
-    byte[] gameRandom,byte[] deckRandom,boolean sharedRandom){
-  public static final int VERSION=2,MAX_CARDS=4096;
+    byte[] gameRandom,byte[] deckRandom,boolean sharedRandom,List<Long> damageTotals,boolean completeStatistics,dev.sgs.core.match.dto.MatchViews.DraftView draft){
+  public StateCheckpoint(int version,String contentVersion,GameState.TurnState turn,List<Player> players,List<Zone> zones,Set<Long> faceUpProcessing,long movementSequence,byte[] gameRandom,byte[] deckRandom,boolean sharedRandom){this(version,contentVersion,turn,players,zones,faceUpProcessing,movementSequence,gameRandom,deckRandom,sharedRandom,Collections.nCopies(8,0L),false,null);}
+
+  public static final int VERSION=3,MAX_CARDS=4096;
   public record Card(long id,String definitionId,CardType type,String effectId,Suit suit,Rank rank,CardType judgmentType){
     public Card(long id,String definitionId,CardType type,String effectId,Suit suit,Rank rank){this(id,definitionId,type,effectId,suit,rank,null);}
     static Card of(CardInstance c){return new Card(c.instanceId(),c.definition().id(),c.type(),c.definition().effectId(),c.suit(),c.rank());}
@@ -23,6 +25,7 @@ public record StateCheckpoint(int version,String contentVersion,GameState.TurnSt
       HeroDefinition hero,int hp,int maxHp,boolean alive,boolean identityPublic){}
   public record Zone(CardZone location,List<Card> cards){public Zone{cards=List.copyOf(cards);}}
   public StateCheckpoint{
+    damageTotals=List.copyOf(damageTotals);if(damageTotals.size()!=8||damageTotals.stream().anyMatch(v->v<0))throw new IllegalArgumentException("invalid statistics");
     players=List.copyOf(players);zones=List.copyOf(zones);faceUpProcessing=Set.copyOf(faceUpProcessing);
     gameRandom=gameRandom.clone();deckRandom=deckRandom.clone();
   }
@@ -37,15 +40,23 @@ public record StateCheckpoint(int version,String contentVersion,GameState.TurnSt
         .map(c->z.kind()==CardZone.Kind.JUDGMENT?Card.ofJudgment(c,game.players().get(z.seat()).delayZone().effectiveType(c)):Card.of(c)).toList())).toList();
     var publicIds=game.cards().publicProcessingCards().stream().map(CardInstance::instanceId).collect(java.util.stream.Collectors.toSet());
     boolean shared=game.random()==game.deck().checkpointRandom();
-    var checkpoint=new StateCheckpoint(VERSION,contentVersion,game.checkpointTurnState(),players,zones,publicIds,
+    var checkpoint=new StateCheckpoint(game.presentationCheckpointVersion(),contentVersion,game.checkpointTurnState(),players,zones,publicIds,
       game.cards().checkpointSequence(),RandomCheckpoint.capture(game.random()),
-      shared?new byte[0]:RandomCheckpoint.capture(game.deck().checkpointRandom()),shared);
+      shared?new byte[0]:RandomCheckpoint.capture(game.deck().checkpointRandom()),shared,game.damageTotals(),game.completeStatistics(),game.tablePresentation().draft());
     checkpoint.validate();return checkpoint;
   }
 
   public void validate(){
-    if(version!=VERSION)throw new IllegalArgumentException("unsupported checkpoint version "+version);
+    if(version!=2&&version!=VERSION)throw new IllegalArgumentException("unsupported checkpoint version "+version);
     text(contentVersion,128);Objects.requireNonNull(turn);
+    if(draft!=null){
+      if(!draft.active()||draft.slots().isEmpty()||draft.slots().size()>8||draft.source()<0||draft.source()>=players.size()||draft.picker()<0||draft.picker()>=players.size()||!draft.title().equals("五谷丰登"))throw new IllegalArgumentException("invalid draft");
+      var ids=new HashSet<Long>();for(var slot:draft.slots()){if(!ids.add(slot.card().instanceId())||slot.recipient()< -1||slot.recipient()>=players.size())throw new IllegalArgumentException("invalid draft slot");
+        var physical=zones.stream().flatMap(z->z.cards().stream()).filter(c->c.id()==slot.card().instanceId()).findFirst().orElseThrow(()->new IllegalArgumentException("unknown draft card"));
+        if(physical.type().ordinal()!=slot.card().typeOrdinal()||physical.suit().ordinal()!=slot.card().suitOrdinal()||physical.rank().ordinal()!=slot.card().rankOrdinal())throw new IllegalArgumentException("draft face mismatch");
+      }
+    }
+
     if(players.size()<2 || players.size()>8 || zones.size()<3+players.size()*3 || zones.size()>3+players.size()*4 || movementSequence<0)
       throw new IllegalArgumentException("invalid checkpoint dimensions");
     var expectedZones=new HashSet<>(List.of(CardZone.DRAW,CardZone.DISCARD,CardZone.PROCESSING));
@@ -124,6 +135,6 @@ public record StateCheckpoint(int version,String contentVersion,GameState.TurnSt
     var game=GameState.restoreCheckpoint(restoredPlayers,deck,gameRng,turn);
     for(var zone:zones)if(zone.location().kind()==CardZone.Kind.SPECIAL)game.cards().restoreSpecial(zone.location().seat(),data.get(zone.location()));
     game.cards().restoreCheckpointProcessing(data.get(CardZone.PROCESSING),faceUpProcessing,movementSequence);
-    game.cards().assertUnique();return game;
+    game.presentationCheckpointVersion(version);game.restoreDraft(draft);game.restoreStatistics(damageTotals,completeStatistics);game.cards().assertUnique();return game;
   }
 }

@@ -25,7 +25,6 @@ import dev.sgs.core.player.SgsPlayer;
  */
 public final class ViewFilter {
 
-  private static final int LOG_LINES = 30;
 
   private ViewFilter() {}
 
@@ -109,12 +108,9 @@ public final class ViewFilter {
     var viewer=state.players().stream().filter(p->p.seat()==viewerSeat && p.alive()).findFirst().orElse(null);
     for (SgsPlayer player : state.players()) {
       Integer distance=viewer!=null && player.alive() && player!=viewer?state.distance(viewer,player):null;
-      seats.add(seatView(player,viewerSeat,finished,visibility,state.chained(player.seat()),state.teamOf(player.seat()),state.publicStatuses(player.seat())).withDistanceFromViewer(distance).withKingdom(state.kingdom(player).ordinal()));
+      seats.add(seatView(player,viewerSeat,finished,visibility,state.chained(player.seat()),state.teamOf(player.seat()),state.publicStatuses(player.seat())).withDistanceFromViewer(distance).withKingdom(state.kingdom(player).ordinal()).withHandLimit(state.handLimit(player)));
     }
-    List<String> logs = new ArrayList<>(state.recentLogs());
-    while (logs.size() > LOG_LINES) {
-      logs.remove(0);
-    }
+    List<String> logs = state.journal().lines();
     int lordSeat =
         state.players().isEmpty() ? dev.sgs.core.match.dto.MatchViews.HIDDEN : state.lordSeat();
     return new MatchSnapshot(
@@ -141,7 +137,7 @@ public final class ViewFilter {
             .map(move -> new dev.sgs.core.match.dto.MatchViews.PublicMoveView(move.sequence(), move.actorSeat(),
                 move.reason().name(), move.cards().stream().map(CardView::of).toList(),move.from().kind().name(),move.from().seat(),move.to().kind().name(),move.to().seat())).toList(),
         state.publicSkillActivations().stream().map(event->
-            new dev.sgs.core.match.dto.MatchViews.PublicSkillActivationView(event.sequence(),event.seat(),event.skillId())).toList()).withCardMotions(motionViews(state,viewerSeat)).withPublicCardReveals(state.publicCardReveals().stream().map(dev.sgs.core.match.dto.MatchViews.PublicCardRevealView::of).toList());
+            new dev.sgs.core.match.dto.MatchViews.PublicSkillActivationView(event.sequence(),event.seat(),event.skillId())).toList()).withTablePresentation(state.tablePresentation()).withCardMotions(motionViews(state,viewerSeat)).withPublicCardReveals(state.publicCardReveals().stream().map(dev.sgs.core.match.dto.MatchViews.PublicCardRevealView::of).toList());
   }
 
   private static List<dev.sgs.core.match.dto.MatchViews.CardMotionView> motionViews(GameState state,int viewerSeat){
@@ -209,6 +205,7 @@ public final class ViewFilter {
       return null;
     }
     boolean asker = prompt.asker().seat() == viewerSeat;
+    if(!asker && prompt.type()==dev.sgs.core.engine.PromptType.WUXIE_COUNTER)return null;
     List<Integer> allowed = new ArrayList<>();
     List<CardView> choices = new ArrayList<>();
     if (asker) {

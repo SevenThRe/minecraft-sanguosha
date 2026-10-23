@@ -3,7 +3,7 @@ package dev.sgs.validation.client.art;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 
-/** V1 identity/team modes: one separate half-heart slot per integer HP; never merge slots. */
+/** initial identity/team modes: one separate half-heart slot per integer HP; never merge slots. */
 public final class HealthRenderer {
     private static final ResourceLocation EMPTY = ResourceLocation.withDefaultNamespace("hud/heart/container");
     private static final ResourceLocation HALF = ResourceLocation.withDefaultNamespace("hud/heart/half");

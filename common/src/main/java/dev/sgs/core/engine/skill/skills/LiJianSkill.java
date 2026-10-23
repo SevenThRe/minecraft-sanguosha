@@ -4,7 +4,7 @@ import dev.sgs.core.engine.PromptType;
 import dev.sgs.core.engine.skill.*;
 import dev.sgs.core.player.SgsPlayer;
 import java.util.*;
-/** Primary target answers Sha first; the second chosen male is the duel's source. */
+/** The first chosen male uses Duel on the second, who answers Sha first. */
 public final class LiJianSkill implements PlannedActiveSkill,PersistentSkillMemory {
   private final SgsPlayer owner;private int usedTurn=-1;
   public LiJianSkill(SgsPlayer owner){this.owner=owner;}
@@ -18,7 +18,7 @@ public final class LiJianSkill implements PlannedActiveSkill,PersistentSkillMemo
     if(costs.size()!=1)return Preparation.reject("one_card_required");
     var cost=costs.getFirst();var zone=g.cards().locate(cost.instanceId());
     if(!CardZone.hand(owner.seat()).equals(zone) && !CardZone.equipment(owner.seat()).equals(zone))return Preparation.reject("unowned_cost");
-    var candidates=g.players().stream().filter(p->p!=owner && p!=target && p.alive() && p.hero()!=null && g.male(p) && api.canSkillDuel(p,target)).map(SgsPlayer::seat).toList();
+    var candidates=g.players().stream().filter(p->p!=owner && p!=target && p.alive() && p.hero()!=null && g.male(p) && api.canSkillDuel(target,p)).map(SgsPlayer::seat).toList();
     if(candidates.isEmpty())return Preparation.reject("no_second_male");
     return Preparation.ready(new ActiveSkillPlan(owner.seat(),g.turnNumber(),id(),target.seat(),
         PromptType.LIJIAN_TARGET,candidates,List.of(cost.instanceId()),ActiveSkillPlan.Effect.UNCOUNTERABLE_DUEL));

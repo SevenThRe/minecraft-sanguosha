@@ -1,5 +1,6 @@
 package dev.sgs.validation.client.widget;
 
+import static dev.sgs.validation.client.ClientText.tr;
 import dev.sgs.core.addon.HeroPresentation;
 import dev.sgs.validation.client.InkText;
 import dev.sgs.validation.client.art.*;
@@ -9,15 +10,18 @@ import net.minecraft.network.chat.Component;
 
 /** The same portrait card is used for candidates and the confirmed selection preview. */
 public final class HeroChoiceWidget extends SgsButton {
-    private final HeroPresentation hero;private final boolean chosen;
+    private final HeroPresentation hero;private final boolean chosen;private final String chosenLabel;
     public HeroChoiceWidget(HeroPresentation hero,int x,int y,int width,int height,boolean chosen,boolean available,OnPress action){
-        super(x,y,width,height,Component.literal(hero.name()),action);this.hero=hero;this.chosen=chosen;active=available;
+        this(hero,x,y,width,height,chosen,available,action,tr("sgs.ui.confirmed_cc4d48b2"));
+    }
+    public HeroChoiceWidget(HeroPresentation hero,int x,int y,int width,int height,boolean chosen,boolean available,OnPress action,String chosenLabel){
+        super(x,y,width,height,Component.literal(dev.sgs.validation.client.ClientText.heroName(hero.id(),hero.name())),action);this.hero=dev.sgs.validation.client.ClientText.hero(hero);this.chosen=chosen;this.chosenLabel=chosenLabel;active=available;
     }
     @Override protected void renderWidget(GuiGraphics g,int mx,int my,float partial){
-        drawCard(g,hero,getX(),getY(),getWidth(),getHeight(),chosen,isHoveredOrFocused());
+        drawCard(g,hero,getX(),getY(),getWidth(),getHeight(),chosen,isHoveredOrFocused(),chosenLabel);
         if(isHoveredOrFocused()){
             var font=Minecraft.getInstance().font;int w=Math.min(280,Math.max(160,g.guiWidth()-20));
-            String description=hero.skills().stream().map(s->s.name()+(s.lordOnly()?"（主公技）":"")+"："+s.description()).collect(java.util.stream.Collectors.joining("\n"));
+            String description=hero.skills().stream().map(s->s.name()+(s.lordOnly()?tr("sgs.ui.lord_skill_bd748281"):"")+"："+s.description()).collect(java.util.stream.Collectors.joining("\n"));
             var lines=font.split(Component.literal(description),w-16);int h=24+lines.size()*10;
             float fit=Math.min(1f,Math.min((g.guiWidth()-16f)/w,(g.guiHeight()-16f)/Math.max(1,h)));
             int actualW=(int)Math.ceil(w*fit),actualH=(int)Math.ceil(h*fit);
@@ -29,6 +33,10 @@ public final class HeroChoiceWidget extends SgsButton {
         }
     }
     public static void drawCard(GuiGraphics g,HeroPresentation hero,int x,int y,int w,int h,boolean chosen,boolean hovered){
+        drawCard(g,hero,x,y,w,h,chosen,hovered,tr("sgs.ui.confirmed_cc4d48b2"));
+    }
+    private static void drawCard(GuiGraphics g,HeroPresentation hero,int x,int y,int w,int h,boolean chosen,boolean hovered,String chosenLabel){
+        hero=dev.sgs.validation.client.ClientText.hero(hero);
         var font=Minecraft.getInstance().font;
         var classic=HeroRenderer.classic(hero.id());
         if(!hero.portrait().isEmpty()){
@@ -41,9 +49,9 @@ public final class HeroChoiceWidget extends SgsButton {
         int strip=Math.max(8,Math.round(w*.13f));g.fill(x+3,y+4,x+strip+3,y+h-footer,0xe23a3430);
         var characters=hero.name().codePoints().mapToObj(cp->new String(Character.toChars(cp))).toList();
         float line=Math.min(strip,Math.max(4,(h-footer-12f)/Math.max(1,characters.size())));
-        for(int i=0;i<characters.size();i++)InkText.fitted(g,font,characters.get(i),x+3+strip/2f,y+10+i*line,strip-1,line,0xfff5e2bd);
+        if(!dev.sgs.validation.client.ClientText.english())for(int i=0;i<characters.size();i++)InkText.fitted(g,font,characters.get(i),x+3+strip/2f,y+10+i*line,strip-1,line,0xfff5e2bd);
         InkText.fitted(g,font,hero.name(),x+w/2f,y+h-footer+2,w-10,footer-5,0xfff3d9a6);
         if(hovered)g.renderOutline(x-2,y-2,w+4,h+4,0xffffd173);
-        if(chosen){int mid=y+h/2;g.fill(x+4,mid-9,x+w-4,mid+10,0xee5b3a22);InkText.fitted(g,font,"已选定",x+w/2f,mid-6,w-12,13,0xffffdf9c);}
+        if(chosen){int mid=y+h/2;g.fill(x+4,mid-9,x+w-4,mid+10,0xee5b3a22);InkText.fitted(g,font,chosenLabel,x+w/2f,mid-6,w-12,13,0xffffdf9c);}
     }
 }

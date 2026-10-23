@@ -70,7 +70,7 @@ public final class GiftAnimations {
         for(var combo:combos.values())if(now-combo.first()>620_000_000L){var old=newest.get(combo.event().to());if(old==null || old.last()<combo.last())newest.put(combo.event().to(),combo);}
         for(var combo:newest.values()){
             var anchor=anchors.apply(combo.event().to());var definition=combo.event().definition();if(anchor==null || definition==null)continue;
-            String label=definition.name()+" ×"+combo.clicks();int x=Math.round(anchor.x()),y=Math.round(anchor.y()-78*unit),w=font.width(label);
+            String label=dev.sgs.validation.client.ClientText.named("sgs.gift."+definition.id(),definition.name())+" ×"+combo.clicks();int x=Math.round(anchor.x()),y=Math.round(anchor.y()-78*unit),w=font.width(label);
             g.fill(x-w/2-4,y-2,x+w/2+4,y+11,0xdd3f241a);g.drawString(font,label,x-w/2,y,0xffffce78,false);
         }
         g.pose().popPose();

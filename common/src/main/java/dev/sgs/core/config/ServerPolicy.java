@@ -9,7 +9,13 @@ import java.util.Set;
 
 /** Server-owned switches, deliberately independent of Minecraft and client preferences. */
 public record ServerPolicy(boolean six, boolean eight, boolean twoVTwo, boolean matchmaking,
-        boolean merchants, boolean virtualTableEnabled, boolean requireDeck, int maxRooms) {
+        boolean merchants, boolean virtualTableEnabled, boolean requireDeck, int maxRooms, PackPolicy packs, boolean openingHandEnabled) {
+    public ServerPolicy(boolean six,boolean eight,boolean twoVTwo,boolean matchmaking,boolean merchants,boolean virtualTableEnabled,boolean requireDeck,int maxRooms,PackPolicy packs){
+        this(six,eight,twoVTwo,matchmaking,merchants,virtualTableEnabled,requireDeck,maxRooms,packs,false);
+    }
+    public ServerPolicy(boolean six,boolean eight,boolean twoVTwo,boolean matchmaking,boolean merchants,boolean virtualTableEnabled,boolean requireDeck,int maxRooms){
+        this(six,eight,twoVTwo,matchmaking,merchants,virtualTableEnabled,requireDeck,maxRooms,PackPolicy.defaults());
+    }
     public static final String FILE_NAME = "server.properties";
     public static final String TEMPLATE = """
         # 三国杀服务器配置，UTF-8。修改后由管理员执行 /sgs reload；也可重启服务器。
@@ -18,6 +24,8 @@ public record ServerPolicy(boolean six, boolean eight, boolean twoVTwo, boolean 
         rooms.eight.enabled=true
         rooms.two_v_two.enabled=true
         rooms.max=64
+        # 是否允许开局免费更换一次手牌，仅影响新对局。
+        match.opening_hand.enabled=false
         matchmaking.enabled=true
         # 排位系统尚未实现，必须保持 false；不会以普通匹配冒充排位。
         ranked.enabled=false
@@ -30,7 +38,7 @@ public record ServerPolicy(boolean six, boolean eight, boolean twoVTwo, boolean 
     private static final Set<String> KEYS = Set.of("rooms.six.enabled", "rooms.eight.enabled",
         "rooms.two_v_two.enabled", "rooms.max", "matchmaking.enabled", "ranked.enabled",
         "merchants.enabled", "merchants.percent", "merchants.table_price", "merchants.deck_price",
-        "tables.virtual.enabled", "survival.require_table", "survival.require_host_deck");
+        "tables.virtual.enabled", "survival.require_table", "survival.require_host_deck", "match.opening_hand.enabled");
 
     public static ServerPolicy load(Path directory) throws IOException {
         Files.createDirectories(directory);
@@ -48,7 +56,7 @@ public record ServerPolicy(boolean six, boolean eight, boolean twoVTwo, boolean 
         var policy=new ServerPolicy(bool(p,"rooms.six.enabled",true), bool(p,"rooms.eight.enabled",true),
             bool(p,"rooms.two_v_two.enabled",true),bool(p,"matchmaking.enabled",true),
             bool(p,"merchants.enabled",true),virtualTableEnabled(p),
-            bool(p,"survival.require_host_deck",true),number(p,"rooms.max",64,1,256));
+            bool(p,"survival.require_host_deck",true),number(p,"rooms.max",64,1,256),PackPolicy.load(directory),bool(p,"match.opening_hand.enabled",false));
         if(p.containsKey("survival.require_table") || p.containsKey("merchants.percent") || p.containsKey("merchants.table_price") || p.containsKey("merchants.deck_price")) {
             var backup=directory.resolve(p.containsKey("survival.require_table") ? "server.properties.legacy-v2.bak" : "server.properties.legacy-v1.bak");
             if(!Files.exists(backup))Files.copy(file,backup);

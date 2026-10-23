@@ -19,7 +19,7 @@ public final class MythicPresentations {
       s("leiji","雷击","使用或打出闪后，可令一名角色判定，黑桃则对其造成2点雷电伤害。",TRIGGERED,NONE,0,0,false,false),
       s("guidao","鬼道","判定生效前，可用一张黑色手牌或装备替换判定牌并获得原判定牌。",TRIGGERED,NONE,0,0,false,true),
       s("huangtian","黄天","主公技，其他群角色的出牌阶段限一次，可交给你一张闪或闪电。",TRIGGERED,NONE,0,0,true,false),
-      s("guhuo","蛊惑","以一张手牌声明基本牌或非延时锦囊。其他角色可质疑；真牌令质疑者失去体力，假牌令其摸牌。有质疑时仅红桃真牌生效。",ACTIVE,ANY,1,1,false,false),
+      s("guhuo","蛊惑","以一张手牌声明基本牌或非延时锦囊。其他角色可质疑；真牌令质疑者失去体力，假牌令其摸牌。有质疑时仅红桃真牌生效。",ACTIVE,NONE,1,1,false,false),
       s("quhu","驱虎","出牌阶段限一次，与体力比你多的角色拼点；赢则其对攻击范围内你选择的角色造成1点伤害，否则其对你造成1点伤害。",ACTIVE,OTHER,0,0,false,false),
       s("jieming","节命","每受到1点伤害后，可令一名角色将手牌补至其体力上限，最多五张。",TRIGGERED,NONE,0,0,false,false),
       s("bazhen","八阵","未装备防具时，视为装备八卦阵。",PASSIVE,NONE,0,0,false,false),

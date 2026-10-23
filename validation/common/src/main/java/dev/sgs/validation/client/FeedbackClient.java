@@ -16,6 +16,7 @@ public final class FeedbackClient {
     });}
     public static FeedbackNetwork.RewardView reward(long match){return REWARDS.get(match);}
     public static long request(long match,String kind,int target,String reason,String detail){
+        if(Minecraft.getInstance().getConnection()==null)return 0;
         var c=new FeedbackNetwork.Command(match,REQUESTS.incrementAndGet(),kind,target,reason,detail);
         Balm.getNetworking().sendToServer(new FeedbackNetwork.Intent(FeedbackNetwork.JSON.toJson(c)));
         return c.requestId();

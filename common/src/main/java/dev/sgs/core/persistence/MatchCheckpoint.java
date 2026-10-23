@@ -5,8 +5,11 @@ import java.util.*;
 /** Session transport state paired with an explicitly restorable rules program. Never a client view. */
 public record MatchCheckpoint(int version,long roomId,String contentId,boolean attack,byte[] engine,
     long phaseRemainingMillis,boolean teammateSharing,Map<UUID,Integer> nonceFloors,
-    dev.sgs.core.room.RoomSettings roomSettings,long botStepDelayMillis,Set<UUID> userAutoplay,Map<UUID,dev.sgs.core.match.SeatControl.Snapshot> seatControls){
-  public static final int VERSION=3;
+    dev.sgs.core.room.RoomSettings roomSettings,long botStepDelayMillis,Set<UUID> userAutoplay,Map<UUID,dev.sgs.core.match.SeatControl.Snapshot> seatControls,List<String> journal){
+  public static final int VERSION=4;
+  public MatchCheckpoint(int version,long roomId,String contentId,boolean attack,byte[] engine,long phaseRemainingMillis,boolean teammateSharing,Map<UUID,Integer> nonceFloors,dev.sgs.core.room.RoomSettings roomSettings,long botStepDelayMillis,Set<UUID> userAutoplay,Map<UUID,dev.sgs.core.match.SeatControl.Snapshot> seatControls){
+    this(version,roomId,contentId,attack,engine,phaseRemainingMillis,teammateSharing,nonceFloors,roomSettings,botStepDelayMillis,userAutoplay,seatControls,List.of());
+  }
   public MatchCheckpoint(int version,long roomId,String contentId,boolean attack,byte[] engine,long phaseRemainingMillis,boolean teammateSharing,Map<UUID,Integer> nonceFloors,dev.sgs.core.room.RoomSettings roomSettings,long botStepDelayMillis,Set<UUID> userAutoplay){
     this(version,roomId,contentId,attack,engine,phaseRemainingMillis,teammateSharing,nonceFloors,roomSettings,botStepDelayMillis,userAutoplay,Map.of());
   }
@@ -14,8 +17,11 @@ public record MatchCheckpoint(int version,long roomId,String contentId,boolean a
     this(version,roomId,contentId,attack,engine,phaseRemainingMillis,teammateSharing,nonceFloors,roomSettings,botStepDelayMillis,Set.of());
   }
   public MatchCheckpoint{
+    journal=List.copyOf(journal);
+    if(journal.size()>dev.sgs.core.game.MatchJournal.MAX_LINES || journal.stream().anyMatch(line->line.length()>4000)
+        || journal.stream().mapToInt(String::length).sum()>dev.sgs.core.game.MatchJournal.MAX_CHARS || version<4&&!journal.isEmpty())throw new IllegalArgumentException("invalid journal");
     userAutoplay=Set.copyOf(userAutoplay);engine=engine.clone();nonceFloors=Map.copyOf(nonceFloors);Objects.requireNonNull(roomSettings);
-    if((version!=1 && version!=2 && version!=VERSION) || roomId<0 || contentId==null || contentId.length()>128 || contentId.isEmpty()
+    if((version<1 || version>VERSION) || roomId<0 || contentId==null || contentId.length()>128 || contentId.isEmpty()
         || engine.length<40 || engine.length>4_000_000 || phaseRemainingMillis<0 || phaseRemainingMillis>3_600_000
         || botStepDelayMillis<0 || botStepDelayMillis>60_000)
       throw new IllegalArgumentException("invalid match checkpoint");

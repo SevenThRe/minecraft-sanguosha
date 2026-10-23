@@ -65,7 +65,19 @@ public final class MatchViews {
       boolean self,
       boolean handVisible,
       boolean chained,
-      int teamId,CardView treasure,List<StatusView> statuses,ControlView control,Integer distanceFromViewer) {
+      int teamId,CardView treasure,List<StatusView> statuses,ControlView control,Integer distanceFromViewer,Integer handLimit) {
+    public SeatView(int seat,String name,boolean human,boolean online,boolean alive,String heroId,
+        int kingdomOrdinal,int hp,int maxHp,int identityOrdinal,int handCount,CardView weapon,
+        CardView armor,CardView horsePlus,CardView horseMinus,List<CardView> delay,List<CardView> hand,
+        boolean self,boolean handVisible,boolean chained,int teamId,CardView treasure,List<StatusView> statuses,ControlView control,Integer distanceFromViewer){
+      this(seat,name,human,online,alive,heroId,kingdomOrdinal,hp,maxHp,identityOrdinal,handCount,
+          weapon,armor,horsePlus,horseMinus,delay,hand,self,handVisible,chained,teamId,treasure,statuses,control,distanceFromViewer,null);
+    }
+    public SeatView withHandLimit(int limit){
+      return new SeatView(seat,name,human,online,alive,heroId,kingdomOrdinal,hp,maxHp,identityOrdinal,handCount,
+          weapon,armor,horsePlus,horseMinus,delay,hand,self,handVisible,chained,teamId,treasure,statuses,control,distanceFromViewer,limit);
+    }
+    public int requiredDiscard(){return Math.max(0,handCount-Math.max(0,handLimit==null?hp:handLimit));}
     public SeatView(int seat,String name,boolean human,boolean online,boolean alive,String heroId,
         int kingdomOrdinal,int hp,int maxHp,int identityOrdinal,int handCount,CardView weapon,
         CardView armor,CardView horsePlus,CardView horseMinus,List<CardView> delay,List<CardView> hand,
@@ -75,13 +87,13 @@ public final class MatchViews {
     }
     public SeatView withDistanceFromViewer(Integer distance){
       return new SeatView(seat,name,human,online,alive,heroId,kingdomOrdinal,hp,maxHp,identityOrdinal,handCount,
-          weapon,armor,horsePlus,horseMinus,delay,hand,self,handVisible,chained,teamId,treasure,statuses,control,distance);
+          weapon,armor,horsePlus,horseMinus,delay,hand,self,handVisible,chained,teamId,treasure,statuses,control,distance,handLimit);
     }
-    public SeatView withKingdom(int value){return new SeatView(seat,name,human,online,alive,heroId,value,hp,maxHp,identityOrdinal,handCount,weapon,armor,horsePlus,horseMinus,delay,hand,self,handVisible,chained,teamId,treasure,statuses,control,distanceFromViewer);}
+    public SeatView withKingdom(int value){return new SeatView(seat,name,human,online,alive,heroId,value,hp,maxHp,identityOrdinal,handCount,weapon,armor,horsePlus,horseMinus,delay,hand,self,handVisible,chained,teamId,treasure,statuses,control,distanceFromViewer,handLimit);}
     public SeatView {control=control==null?new ControlView("MANUAL",0):control;statuses=statuses==null?List.of():List.copyOf(statuses);}
     public SeatView withControl(ControlView value){
       return new SeatView(seat,name,human,online,alive,heroId,kingdomOrdinal,hp,maxHp,identityOrdinal,handCount,
-          weapon,armor,horsePlus,horseMinus,delay,hand,self,handVisible,chained,teamId,treasure,statuses,value,distanceFromViewer);
+          weapon,armor,horsePlus,horseMinus,delay,hand,self,handVisible,chained,teamId,treasure,statuses,value,distanceFromViewer,handLimit);
     }
     public SeatView(int seat,String name,boolean human,boolean online,boolean alive,String heroId,
         int kingdomOrdinal,int hp,int maxHp,int identityOrdinal,int handCount,CardView weapon,
@@ -93,7 +105,7 @@ public final class MatchViews {
       java.util.function.Function<CardView,CardView> annotate=c->c==null?null:c.withPlayOptions(options.getOrDefault(c.instanceId(),List.of()));
       return new SeatView(seat,name,human,online,alive,heroId,kingdomOrdinal,hp,maxHp,identityOrdinal,handCount,
           annotate.apply(weapon),annotate.apply(armor),annotate.apply(horsePlus),annotate.apply(horseMinus),delay,
-          hand.stream().map(annotate).toList(),self,handVisible,chained,teamId,annotate.apply(treasure),statuses,control,distanceFromViewer);
+          hand.stream().map(annotate).toList(),self,handVisible,chained,teamId,annotate.apply(treasure),statuses,control,distanceFromViewer,handLimit);
     }
     public SeatView(int seat,String name,boolean human,boolean online,boolean alive,String heroId,
         int kingdomOrdinal,int hp,int maxHp,int identityOrdinal,int handCount,CardView weapon,
@@ -190,6 +202,18 @@ public final class MatchViews {
     public HeroBanView {candidates=List.copyOf(candidates);choices=List.copyOf(choices);}
   }
 
+  public record DraftSlot(CardView card,int recipient) {}
+  public record DraftView(long id,int source,int picker,String title,List<DraftSlot> slots,boolean active){
+    public DraftView{slots=List.copyOf(slots);}
+  }
+  public record TableEffect(long id,String kind,int source,int target,String label,List<CardView> cards,boolean success){
+    public TableEffect{cards=List.copyOf(cards);}
+  }
+  public record TablePresentation(DraftView draft,List<TableEffect> effects,List<Long> damageTotals,boolean completeStatistics){
+    public TablePresentation{effects=List.copyOf(effects);damageTotals=List.copyOf(damageTotals);}
+    public static TablePresentation empty(){return new TablePresentation(null,List.of(),List.of(),false);}
+  }
+
   /** Per-viewer full-table snapshot. */
   public record MatchSnapshot(
       int status,
@@ -218,7 +242,37 @@ public final class MatchViews {
       CounterspellWindowView counterspellWindow,
       List<TargetAvailabilityView> selfTargetAvailability,
       List<PublicCardRevealView> publicCardReveals,
-      HeroBanView heroBan,List<CardMotionView> cardMotions) {
+      HeroBanView heroBan,List<CardMotionView> cardMotions, TablePresentation tablePresentation) {
+    public MatchSnapshot(
+      int status,
+      int viewerSeat,
+      int turnNumber,
+      int phaseOrdinal,
+      int currentSeat,
+      int lordSeatOrdinal,
+      int drawPileCount,
+      int discardPileCount, // Retained wire field; ordinary views always send HIDDEN, not a debug counter.
+      long phaseDeadlineMillis,
+      int outcomeOrdinal,
+      List<String> logLines,
+      List<SeatView> seats,
+      PromptView prompt,
+      List<String> heroCandidates,
+      long selectionDeadlineMillis,
+      JudgmentView judgment,
+      List<CardView> processing,
+      List<PublicMoveView> publicMoves,
+      List<PublicSkillActivationView> skillActivations,
+      List<dev.sgs.core.addon.HeroPresentation> heroPresentations,
+      IdentityIntroView identityIntro,
+      OpeningHandView openingHand,
+      List<SkillAvailabilityView> selfSkillAvailability,
+      CounterspellWindowView counterspellWindow,
+      List<TargetAvailabilityView> selfTargetAvailability,
+      List<PublicCardRevealView> publicCardReveals,
+      HeroBanView heroBan,List<CardMotionView> cardMotions) {this(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions,TablePresentation.empty());}
+    public MatchSnapshot withTablePresentation(TablePresentation value){return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions,value);}
+
   public MatchSnapshot(
       int status,
       int viewerSeat,
@@ -310,18 +364,18 @@ public final class MatchViews {
       this(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,List.of());
     }
 
-    public MatchSnapshot withCardMotions(List<CardMotionView> motions){return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,motions);}
-    public MatchSnapshot withHeroBan(HeroBanView ban){return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,ban,cardMotions);}
+    public MatchSnapshot withCardMotions(List<CardMotionView> motions){return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,motions,tablePresentation);}
+    public MatchSnapshot withHeroBan(HeroBanView ban){return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,ban,cardMotions,tablePresentation);}
     public MatchSnapshot withPublicCardReveals(List<PublicCardRevealView> values){
-      return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,values,heroBan,cardMotions);
+      return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,values,heroBan,cardMotions,tablePresentation);
     }
-    public MatchSnapshot withControls(java.util.Map<Integer,ControlView> controls){return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats.stream().map(s->s.withControl(controls.get(s.seat()))).toList(),prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions);}
+    public MatchSnapshot withControls(java.util.Map<Integer,ControlView> controls){return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats.stream().map(s->s.withControl(controls.get(s.seat()))).toList(),prompt,heroCandidates,selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions,tablePresentation);}
     public MatchSnapshot withOwnCardPlayOptions(java.util.Map<Long,List<CardPlayOption>> options){
       return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,
           discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,
           seats.stream().map(s->s.self()?s.withPlayOptions(options):s).toList(),prompt,heroCandidates,
           selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,
-          openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions);
+          openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions,tablePresentation);
     }
     public MatchSnapshot(int status,int viewerSeat,int turnNumber,int phaseOrdinal,int currentSeat,
         int lordSeatOrdinal,int drawPileCount,int discardPileCount,long phaseDeadlineMillis,int outcomeOrdinal,
@@ -338,7 +392,7 @@ public final class MatchViews {
       return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,
           discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,
           selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,
-          openingHand,selfSkillAvailability,counterspellWindow,hints,publicCardReveals,heroBan,cardMotions);
+          openingHand,selfSkillAvailability,counterspellWindow,hints,publicCardReveals,heroBan,cardMotions,tablePresentation);
     }
     public MatchSnapshot(int status,int viewerSeat,int turnNumber,int phaseOrdinal,int currentSeat,
         int lordSeatOrdinal,int drawPileCount,int discardPileCount,long phaseDeadlineMillis,int outcomeOrdinal,
@@ -354,7 +408,7 @@ public final class MatchViews {
       return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,
           discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,
           selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,
-          openingHand,selfSkillAvailability,window,selfTargetAvailability,publicCardReveals,heroBan,cardMotions);
+          openingHand,selfSkillAvailability,window,selfTargetAvailability,publicCardReveals,heroBan,cardMotions,tablePresentation);
     }
     public MatchSnapshot(int status,int viewerSeat,int turnNumber,int phaseOrdinal,int currentSeat,
         int lordSeatOrdinal,int drawPileCount,int discardPileCount,long phaseDeadlineMillis,int outcomeOrdinal,
@@ -369,12 +423,12 @@ public final class MatchViews {
     public MatchSnapshot withSelfSkillAvailability(List<SkillAvailabilityView> availability){
       return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,
           discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,
-          selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,availability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions);
+          selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,openingHand,availability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions,tablePresentation);
     }
     public MatchSnapshot withHeroPresentations(List<dev.sgs.core.addon.HeroPresentation> values){
       return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,
           discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,
-          selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,values,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions);
+          selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,values,identityIntro,openingHand,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions,tablePresentation);
     }
     public MatchSnapshot(int status,int viewerSeat,int turnNumber,int phaseOrdinal,int currentSeat,
         int lordSeatOrdinal,int drawPileCount,int discardPileCount,long phaseDeadlineMillis,int outcomeOrdinal,
@@ -389,7 +443,7 @@ public final class MatchViews {
     public MatchSnapshot withOpeningHand(OpeningHandView opening){
       return new MatchSnapshot(status,viewerSeat,turnNumber,phaseOrdinal,currentSeat,lordSeatOrdinal,drawPileCount,
           discardPileCount,phaseDeadlineMillis,outcomeOrdinal,logLines,seats,prompt,heroCandidates,
-          selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,opening,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions);
+          selectionDeadlineMillis,judgment,processing,publicMoves,skillActivations,heroPresentations,identityIntro,opening,selfSkillAvailability,counterspellWindow,selfTargetAvailability,publicCardReveals,heroBan,cardMotions,tablePresentation);
     }
     public MatchSnapshot(int status,int viewerSeat,int turnNumber,int phaseOrdinal,int currentSeat,
         int lordSeatOrdinal,int drawPileCount,int discardPileCount,long phaseDeadlineMillis,int outcomeOrdinal,
@@ -429,6 +483,7 @@ public final class MatchViews {
           heroCandidates, selectionDeadlineMillis, judgment, List.of(), List.of());
     }
     public MatchSnapshot {
+      if(tablePresentation==null)tablePresentation=TablePresentation.empty();
       cardMotions=cardMotions==null?List.of():List.copyOf(cardMotions);
       publicCardReveals=publicCardReveals==null?List.of():List.copyOf(publicCardReveals);
       processing = List.copyOf(processing);

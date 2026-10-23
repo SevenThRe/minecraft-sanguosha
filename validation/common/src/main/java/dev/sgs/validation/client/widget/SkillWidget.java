@@ -1,5 +1,6 @@
 package dev.sgs.validation.client.widget;
 
+import static dev.sgs.validation.client.ClientText.tr;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -17,12 +18,16 @@ public final class SkillWidget extends SgsButton {
         active=available && spec.kind()!=Kind.PASSIVE;engaged(selected);
     }
     public void disableWithReason(String reason){active=false;unavailableReason=reason==null?"":reason;}
-    private String status(){if(!unavailableReason.isEmpty())return unavailableReason;return switch(spec.kind()){
-        case PASSIVE->"锁定技 · 自动生效";
-        case TOGGLE->!active?"当前不可发动":selected?"转化已开启":"点击开启转化";
-        case LIMITED->active?"限定技 · 可发动":"限定技 · 不可发动";
-        case ACTIVE->active?"点击发动":"当前不可发动";
-        case TRIGGERED->active?"可选择发动":"满足条件时询问";
+    @Override public boolean mouseClicked(double x,double y,int button){
+        if(button==1 && Minecraft.getInstance().screen instanceof dev.sgs.validation.client.MatchScreen screen && screen.optionalSkillSettingsAvailable() && visible && x>=getX() && x<getX()+getWidth() && y>=getY() && y<getY()+getHeight() && dev.sgs.validation.client.OptionalSkillPreferences.supports(spec.id())){dev.sgs.validation.client.OptionalSkillPreferences.toggle(spec.id());return true;}
+        return super.mouseClicked(x,y,button);
+    }
+    private String status(){if(dev.sgs.validation.client.OptionalSkillPreferences.supports(spec.id()))return tr(dev.sgs.validation.client.OptionalSkillPreferences.enabled(spec.id())?"sgs.ui.skill_auto_on":"sgs.ui.skill_auto_off");if(!unavailableReason.isEmpty())return unavailableReason;return switch(spec.kind()){
+        case PASSIVE->tr("sgs.ui.locked_automatic_22889e77");
+        case TOGGLE->!active?tr("sgs.ui.cannot_activate_now_67a7b7c8"):selected?tr("sgs.ui.conversion_enabled_6fb06139"):tr("sgs.ui.click_to_enable_conversion_ea8066df");
+        case LIMITED->active?tr("sgs.ui.limited_available_7d7a6d0a"):tr("sgs.ui.limited_unavailable_a3319507");
+        case ACTIVE->active?tr("sgs.ui.click_to_activate_5ce1ae91"):tr("sgs.ui.cannot_activate_now_67a7b7c8");
+        case TRIGGERED->active?tr("sgs.ui.optional_activation_358e2c4a"):tr("sgs.ui.prompts_when_conditions_are_met_04111543");
     };}
     @Override protected boolean parchment(){return false;}
     @Override protected void renderWidget(GuiGraphics g,int mx,int my,float partial){

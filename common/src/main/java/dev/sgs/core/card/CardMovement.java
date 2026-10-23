@@ -29,7 +29,9 @@ public final class CardMovement {
   public long ruleListenerRevision(){return ruleListenerRevision;}
   public int observerCount(){return listeners.size();}
 
-  public CardMovement(List<SgsPlayer> players,Deck deck){this.players=players;this.deck=deck;}
+  private final Consumer<CardMove> presentation;
+  public CardMovement(List<SgsPlayer> players,Deck deck){this(players,deck,ignored->{});}
+  public CardMovement(List<SgsPlayer> players,Deck deck,Consumer<CardMove> presentation){this.players=players;this.deck=deck;this.presentation=Objects.requireNonNull(presentation);}
   public void addListener(Consumer<CardMove> listener){listeners.add(Objects.requireNonNull(listener));}
   public void setRuleListener(Consumer<CardMove> listener){ruleListener=Objects.requireNonNull(listener);ruleListenerRevision++;}
   public List<CardMove> recentMoves(){return List.copyOf(recent);}
@@ -136,6 +138,7 @@ public final class CardMovement {
       recent.addLast(event);while(recent.size()>256)recent.removeFirst();committed.add(event);
     }
     // Copy the listener list so a listener may safely register another listener.
+    committed.forEach(presentation);
     for(var event:committed){ruleListener.accept(event);for(var listener:List.copyOf(listeners))listener.accept(event);}
   }
   private String slot(CardZone zone,CardInstance card){
@@ -209,6 +212,7 @@ public final class CardMovement {
       var move=new CardMove(++sequence,CardZone.PROCESSING,CardZone.DRAW,group,SKILL_GIVE,actor,false);
       recent.addLast(move);while(recent.size()>256)recent.removeFirst();events.add(move);
     }
+    events.forEach(presentation);
     for(var event:events){ruleListener.accept(event);for(var listener:List.copyOf(listeners))listener.accept(event);}
   }
   /** Damage-card acquisition is all-or-nothing; no sources or an already moved source yields 0. */

@@ -36,6 +36,7 @@ public final class GameState {
     var canonical=cards().cards(CardZone.hand(owner)).stream().filter(c->c.instanceId()==card.instanceId()).findFirst().orElseThrow();
     var value=new PublicCardReveal(PublicCardReveal.key(turnNumber,reason,owner,subject,canonical.instanceId())+":"+(++publicRevealSequence),owner,subject,reason,List.of(canonical),true);
     publicCardReveals.addLast(value);
+    journal.add(journal.seat(owner)+"展示了"+MatchJournal.card(canonical));
     while(publicCardReveals.size()>16)publicCardReveals.removeFirst();
   }
   public void completeCardReveal(String reason,int owner,int subject,long card){
@@ -43,6 +44,51 @@ public final class GameState {
     if(latest.isEmpty())return;
     var key=latest.get().id();var copy=publicCardReveals.stream().map(r->r.id().equals(key)?r.completed():r).toList();
     publicCardReveals.clear();publicCardReveals.addAll(copy);
+  }
+
+  private dev.sgs.core.match.dto.MatchViews.DraftView draftView;
+  private final Deque<dev.sgs.core.match.dto.MatchViews.TableEffect> tableEffects=new ArrayDeque<>();
+  private final java.util.Map<Long,List<dev.sgs.core.match.dto.MatchViews.TableEffect>> publicUses=new java.util.HashMap<>();
+  private long tableSequence;
+  private java.util.function.Consumer<dev.sgs.core.match.dto.MatchViews.TableEffect> tableEffectObserver=effect->{};
+  /** Runtime presentation barrier; never serialized into checkpoints. */
+  public void setTableEffectObserver(java.util.function.Consumer<dev.sgs.core.match.dto.MatchViews.TableEffect> observer){tableEffectObserver=java.util.Objects.requireNonNull(observer);}
+
+  private int presentationCheckpointVersion=3;
+  public int presentationCheckpointVersion(){return presentationCheckpointVersion;}
+  public void presentationCheckpointVersion(int version){presentationCheckpointVersion=version;}
+  private List<Long> damageTotals=new ArrayList<>(Collections.nCopies(8,0L));private boolean completeStatistics=true;
+  public List<Long> damageTotals(){return List.copyOf(damageTotals);}public boolean completeStatistics(){return completeStatistics;}
+  public void restoreStatistics(List<Long> values,boolean complete){if(values.size()!=8||values.stream().anyMatch(v->v==null||v<0))throw new IllegalArgumentException("invalid damage statistics");damageTotals=new ArrayList<>(values);completeStatistics=complete;}
+  public void recordDamage(int seat,int amount){if(seat>=0&&seat<players.size()&&amount>0)damageTotals.set(seat,Math.addExact(damageTotals.get(seat),amount));}
+
+  public dev.sgs.core.match.dto.MatchViews.TablePresentation tablePresentation(){
+    publicUses.keySet().removeIf(id->{var zone=cards().locate(id);return zone==null || zone.kind()!=dev.sgs.core.card.CardZone.Kind.PROCESSING && zone.kind()!=dev.sgs.core.card.CardZone.Kind.JUDGMENT;});
+    var effects=new java.util.TreeMap<Long,dev.sgs.core.match.dto.MatchViews.TableEffect>();
+    for(var event:tableEffects)effects.put(event.id(),event);
+    for(var events:publicUses.values())for(var event:events)effects.put(event.id(),event);
+    return new dev.sgs.core.match.dto.MatchViews.TablePresentation(draftView,List.copyOf(effects.values()),damageTotals(),completeStatistics);
+  }
+  public void restoreDraft(dev.sgs.core.match.dto.MatchViews.DraftView draft){draftView=draft;}
+  public void beginDraft(long id,int source,String title,List<CardInstance> cards){draftView=new dev.sgs.core.match.dto.MatchViews.DraftView(id,source,source,title,cards.stream().map(c->new dev.sgs.core.match.dto.MatchViews.DraftSlot(dev.sgs.core.match.dto.MatchViews.CardView.of(c),-1)).toList(),true);}
+  public void draftPicker(int seat){if(draftView!=null&&draftView.active())draftView=new dev.sgs.core.match.dto.MatchViews.DraftView(draftView.id(),draftView.source(),seat,draftView.title(),draftView.slots(),true);}
+  public void claimDraft(long card,int seat){if(draftView!=null&&draftView.active())draftView=new dev.sgs.core.match.dto.MatchViews.DraftView(draftView.id(),draftView.source(),seat,draftView.title(),draftView.slots().stream().map(slot->slot.card().instanceId()==card?new dev.sgs.core.match.dto.MatchViews.DraftSlot(slot.card(),seat):slot).toList(),true);}
+  public void finishDraft(){draftView=null;}
+  public void beginPublicCardUse(List<CardInstance> cards){
+    var ids=cards.stream().map(CardInstance::instanceId).collect(java.util.stream.Collectors.toSet());
+    ids.forEach(publicUses::remove);
+    tableEffects.removeIf(e->e.kind().equals("CARD_USE") && (ids.isEmpty()?e.cards().isEmpty():e.cards().stream().anyMatch(c->ids.contains(c.instanceId()))));
+  }
+  /** Call only after all displayed cards have become public under the actual rule. */
+  public void tableEffect(String kind,int source,int target,String label,List<CardInstance> cards,boolean success){
+    tableEffects.addLast(new dev.sgs.core.match.dto.MatchViews.TableEffect(++tableSequence,kind,source,target,label,cards.stream().map(dev.sgs.core.match.dto.MatchViews.CardView::of).toList(),success));
+    if(kind.equals("CARD_USE"))for(var card:cards){
+      var receipts=publicUses.computeIfAbsent(card.instanceId(),id->new java.util.ArrayList<>());
+      if(!receipts.isEmpty() && receipts.getLast().source()!=source)receipts.clear();
+      receipts.removeIf(e->e.target()==target);receipts.add(tableEffects.getLast());
+    }
+    while(tableEffects.size()>16)tableEffects.removeFirst();
+    tableEffectObserver.accept(tableEffects.getLast());
   }
 
   public static final int MIN_PLAYERS = 2;
@@ -58,6 +104,8 @@ public final class GameState {
   private final CardMovement cards;
   private final Random random;
   private final Deque<String> logs = new ArrayDeque<>();
+  private final MatchJournal journal=new MatchJournal(this);
+  public MatchJournal journal(){return journal;}
   /** Transient presentation receipts; neither hidden identities nor rule/save state. */
   public record PublicSkillActivation(long sequence,int seat,String skillId) {}
   private final Deque<PublicSkillActivation> publicSkillActivations=new ArrayDeque<>();
@@ -80,6 +128,7 @@ public final class GameState {
     if(status==GameStatus.HERO_SELECTION || seat<0 || seat>=players.size() || players.get(seat).hero()==null)return;
     if(skillId==null || skillId.isBlank())throw new IllegalArgumentException("missing skill id");
     publicSkillActivations.addLast(new PublicSkillActivation(++publicSkillSequence,seat,skillId));
+    journal.skill(seat,skillId);
     while(publicSkillActivations.size()>32)publicSkillActivations.removeFirst();
   }
   // Optional external observers (headless simulator, bridge logging); never required for play.
@@ -170,15 +219,17 @@ public final class GameState {
 
   public void setChained(int seat, boolean chained) {
     if (seat < 0 || seat >= players.size()) throw new IllegalArgumentException("unknown seat");
+    boolean previous=chainedSeats.contains(seat);
     if (chained && players.get(seat).alive()) chainedSeats.add(seat);
     else chainedSeats.remove(seat);
+    if(previous!=chainedSeats.contains(seat))journal.add(journal.seat(seat)+(chainedSeats.contains(seat)?"进入连环状态":"解除连环状态"));
   }
 
   private GameState(List<SgsPlayer> players, Deck deck, Random random) {
     this.players = players;
     this.mode=players.size()==6?dev.sgs.core.room.RoomMode.SIX:players.size()==8?dev.sgs.core.room.RoomMode.EIGHT:null;
     this.deck = deck;
-    this.cards = new CardMovement(players,deck);
+    this.cards = new CardMovement(players,deck,journal::movement);
     this.random = random;
   }
 
@@ -209,7 +260,7 @@ public final class GameState {
     return begin(state, heroesBySeat);
   }
 
-  /** Project 2v2 v1: public seats 1/4 versus 2/3; identities are not gameplay roles. */
+  /** Project 2v2 initial: public seats 1/4 versus 2/3; identities are not gameplay roles. */
   public static GameState startTwoVTwo(List<SgsPlayer> players,List<HeroDefinition> heroes,Deck deck,Random random){
     if(players.size()!=4)throw new IllegalArgumentException("2v2 needs four seats");
     GameState state=create(players,heroes,deck,random);
@@ -530,6 +581,22 @@ public final class GameState {
   }
 
   public void log(String pattern, Object... args) {
+    // Only known public facts enter the player journal. Diagnostics never cross this boundary.
+    String entry=switch(pattern){
+      case "turn {} starts at seat {}" -> journal.seat((int)args[1])+"的回合开始";
+      case "game started with {} players; lord is seat {}", "2v2 game started: public teams assigned; first seat 1" -> "对局开始";
+      case "seat {} took {} damage (hp {}) nature={} chain={} source={}" -> journal.seat((int)args[0])+"受到"+((int)args[5]>=0?"来自"+journal.seat((int)args[5])+"的":"")+args[1]+"点伤害，剩余体力"+args[2];
+      case "seat {} lost {} hp (hp {})" -> journal.seat((int)args[0])+"失去"+args[1]+"点体力，剩余体力"+args[2];
+      case "seat {} died as {}", "seat {} died on team {}" -> journal.seat((int)args[0])+"阵亡";
+      case "seat {} survived near-death with hp {}" -> journal.seat((int)args[0])+"脱离濒死，剩余体力"+args[1];
+      case "seat {} turns over: {}" -> journal.seat((int)args[0])+"翻面";
+      case "seat {} dodged the {} from seat {}" -> journal.seat((int)args[0])+"闪避了"+journal.seat((int)args[2])+"的杀";
+      case "seat {} skips draw phase due to bingliang" -> journal.seat((int)args[0])+"因兵粮寸断跳过摸牌阶段";
+      case "seat {} is acedia-bound and skips the play phase" -> journal.seat((int)args[0])+"因乐不思蜀跳过出牌阶段";
+      case "game finished: {}" -> "对局结束";
+      default -> null;
+    };
+    if(entry!=null)journal.add(entry);
     log(simpleFormat(pattern, args));
   }
 

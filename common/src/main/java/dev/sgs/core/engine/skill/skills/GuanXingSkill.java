@@ -19,6 +19,12 @@ public final class GuanXingSkill implements AwaitableDeckOrderEffect {
     try{while(!pending.isEmpty() && owner.alive()){
       var choice=api.requestSkillChoice(owner,owner,PromptType.GUANXING_ORDER,id(),pending,List.of(0,1),false);
       if(choice.isEmpty())break;
+      if(choice.get().deckOrder()!=null){
+        var order=choice.get().deckOrder();if(!order.matches(pending.stream().map(CardInstance::instanceId).toList()))break;
+        for(long id:order.top())top.add(pending.stream().filter(card->card.instanceId()==id).findFirst().orElseThrow());
+        for(long id:order.bottom())bottom.add(pending.stream().filter(card->card.instanceId()==id).findFirst().orElseThrow());
+        pending.clear();break;
+      }
       var card=pending.stream().filter(x->x.instanceId()==choice.get().cardId()).findFirst().orElse(null);
       if(card==null || choice.get().targetSeat()<0 || choice.get().targetSeat()>1)break;
       pending.remove(card);if(choice.get().targetSeat()==0)top.add(card);else bottom.add(card);

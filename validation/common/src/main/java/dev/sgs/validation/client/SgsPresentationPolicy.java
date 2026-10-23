@@ -8,6 +8,6 @@ public final class SgsPresentationPolicy {
     public static boolean ownsCanvas(){
         var screen=Minecraft.getInstance().screen;
         return screen instanceof MatchScreen||screen instanceof LobbyScreen||screen instanceof CollectionScreen
-            ||screen instanceof MatchChatScreen;
+            ||screen instanceof ReportHistoryChatScreen||screen instanceof ProbeScreen;
     }
 }

@@ -11,7 +11,9 @@ public final class HeroPackService {
     private HeroPackService(){}
     public static void start(MinecraftServer server){
         var root=server.getWorldPath(LevelResource.ROOT).resolve("sgs-devkit");
-        try{var loaded=HeroPackLoader.loadConfigured(root);LOADED.put(server,loaded);AddonRuntime.installForServer(loaded.catalog());
+        try{var loaded=HeroPackLoader.loadConfigured(root);try{dev.sgs.validation.survival.SurvivalService.policy(server).packs().validateCatalog(loaded.catalog());}
+            catch(RuntimeException failure){loaded.close();throw failure;}
+            LOADED.put(server,loaded);AddonRuntime.installForServer(loaded.catalog());
             ProbeMod.LOG.info("SGS_HERO_PACKS_LOADED packs={} heroes={}",loaded.receipts().size(),loaded.catalog().heroes().size());
         }catch(Exception error){throw new IllegalStateException("Invalid server hero-pack configuration: "+root,error);}
     }

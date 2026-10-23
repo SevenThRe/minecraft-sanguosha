@@ -22,9 +22,10 @@ final class TiesuoRule {
     }
     engine.beginCounterspellScope();try{
     engine.beginOwnedUse(source,card,CardMove.Reason.USE);
+    engine.recordTargetedUse(source,card,java.util.stream.Stream.of(first,second).filter(java.util.Objects::nonNull).toList());
     engine.cardUseCommitted(source,card);
     try{for(var recipient:state.alivePlayersFromCurrent()){
-      if((recipient==first || recipient==second) && !engine.isCounteredByWuxie(recipient)){
+      if((recipient==first || recipient==second) && !engine.isCounteredByWuxie(recipient,dev.sgs.core.card.CardType.TIESUO)){
         state.setChained(recipient.seat(),!state.chained(recipient.seat()));
         state.log("seat {} chain state {}",recipient.seat(),state.chained(recipient.seat()));
       }

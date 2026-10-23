@@ -11,6 +11,6 @@ public final class SgsMusicPolicy {
         if(client.getConnection()==null)return false;
         return MatchClient.hasSession() || client.screen instanceof MatchScreen
             || client.screen instanceof LobbyScreen || client.screen instanceof CollectionScreen
-            || client.screen instanceof MatchChatScreen;
+            || client.screen instanceof ReportHistoryChatScreen || client.screen instanceof ProbeScreen;
     }
 }

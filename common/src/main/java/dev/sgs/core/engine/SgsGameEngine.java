@@ -185,7 +185,7 @@ public final class SgsGameEngine implements SkillEngine {
         state.log("seat {} references unknown skill ids, skipped: {}", player.seat(), unknown);
       }
     }
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -195,7 +195,7 @@ public final class SgsGameEngine implements SkillEngine {
     try {
     var prompt=new PromptRequest(nextPromptId(),PromptType.FANJIAN_SUIT,target,source,List.of(),List.of(),clock.nowMillis()+responseTimeoutMillis,"fanjian");
     return responder.chooseSuit(state,prompt).filter(s->s!=dev.sgs.core.card.Suit.NONE).orElse(dev.sgs.core.card.Suit.SPADE);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -235,12 +235,13 @@ public final class SgsGameEngine implements SkillEngine {
     if(EquipmentDamageRules.attack(card))return validateSha(source,target).accepted()&&cardTargetAllowed(source,target,card);
     if(type==CardType.TAO)return validateTao(source).accepted();
     if(type==CardType.JIU)return validateJiu().accepted();
+    if(type==CardType.JIEJIA)return ZhuluRules.validateDisarm(this,target).accepted()&&cardTargetAllowed(source,target,card);
     if(type==CardType.HUOGONG)return FireAttackRule.validate(this,source,target,card).accepted()&&cardTargetAllowed(source,target,card);
     if(type==CardType.JIEDAO)return validateJiedao(source,target,secondary,card).accepted()&&cardTargetAllowed(source,target,card);
     if(type==CardType.GUOHE||type==CardType.SHUNSHOU||type==CardType.JUEDOU)
       return validateSingleTarget(source,target,type).accepted()&&cardTargetAllowed(source,target,card);
-    return Set.of(CardType.WUZHONG,CardType.NANMAN,CardType.WANJIAN,CardType.TAOYUAN,CardType.WUGU).contains(type)
-        ||type==CardType.TIESUO&&target!=null&&target.alive()&&cardTargetAllowed(source,target,card);
+    return Set.of(CardType.ZHULU,CardType.WUZHONG,CardType.NANMAN,CardType.WANJIAN,CardType.TAOYUAN,CardType.WUGU).contains(type)
+        ||type==CardType.TIESUO&&TiesuoRule.validate(state,card,target,secondary).accepted()&&(target==null||cardTargetAllowed(source,target,card))&&(secondary==null||cardTargetAllowed(source,secondary,card));
   }
 
   @Override public boolean requestSkillInvoke(SgsPlayer actor,String skillId,SgsPlayer subject){
@@ -257,7 +258,7 @@ public final class SgsGameEngine implements SkillEngine {
         List.of(),List.of(),clock.nowMillis()+responseTimeoutMillis,skillId);
     try{return responder.invoke(state,prompt) && clock.nowMillis()<=prompt.deadlineMillis() && actor.alive();}
     catch(RuntimeException e){state.log("skill responder error for seat {}: {}",actor.seat(),e.toString());return false;}
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -294,7 +295,12 @@ public final class SgsGameEngine implements SkillEngine {
         if(clock.nowMillis()>prompt.deadlineMillis() || !actor.alive() || actor.hp()<=0&&!dyingSelf&&!skills.mythic().survivesBuqu(actor) || selected==null || selected.isEmpty())
           return new ChoiceResult(Optional.empty(),false);
         var choice=selected.get();
-        boolean valid=(prompt.allowsHiddenChoice(choice.cardId()) || cards.stream().anyMatch(card->card.instanceId()==choice.cardId()))
+        if(choice.deckOrder()!=null){
+          boolean valid=type==PromptType.GUANXING_ORDER&&choice.deckOrder().matches(cards.stream().map(CardInstance::instanceId).toList());
+          return new ChoiceResult(valid?selected:Optional.empty(),!valid);
+        }
+        if(type==PromptType.TUXI_TARGET){boolean valid=choice.validTuxi(targets);return new ChoiceResult(valid?selected:Optional.empty(),!valid);}
+        boolean valid=choice.targetSeats().isEmpty() && (prompt.allowsHiddenChoice(choice.cardId()) || cards.stream().anyMatch(card->card.instanceId()==choice.cardId()))
             && (targets.isEmpty()?choice.targetSeat()==-1:targets.contains(choice.targetSeat()));
         return new ChoiceResult(valid?selected:Optional.empty(),!valid);
       }catch(RuntimeException e){state.log("skill choice failed for seat {}: {}",actor.seat(),e.toString());return new ChoiceResult(Optional.empty(),false);}
@@ -318,7 +324,7 @@ public final class SgsGameEngine implements SkillEngine {
     if(card==null)return false;
     var zone=state.cards().locate(card.instanceId());
     state.cards().move(List.of(card),zone,CardZone.hand(actor.seat()),EFFECT_GAIN,actor.seat());return true;
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -338,7 +344,7 @@ public final class SgsGameEngine implements SkillEngine {
     var decision=ask(prompt);
     if(decision.isPresent()){spendDecision(helper,decision.get());return true;}
     return false;
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -373,7 +379,7 @@ public final class SgsGameEngine implements SkillEngine {
         || helper==providedAttackTarget && emptiesKongcheng(helper,decision.get().card())))return Optional.empty();
     beginOwnedUse(helper,decision.get().card(),RESPONSE);
     return Optional.of(decision.get().card());
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -387,7 +393,7 @@ public final class SgsGameEngine implements SkillEngine {
     if(supplied.isEmpty())return SkillResult.reject("no_provider");
     commitProcessedAttack(lord,supplied.get(),target);
     return SkillResult.ok();
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -415,7 +421,7 @@ public final class SgsGameEngine implements SkillEngine {
     if(!state.players().contains(from) || !state.players().contains(to))throw new IllegalArgumentException("unknown player");
     if(from!=to && CardZone.hand(from.seat()).equals(state.cards().locate(card.instanceId())))
       state.cards().move(List.of(card),CardZone.hand(from.seat()),CardZone.hand(to.seat()),SKILL_GIVE,from.seat());
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -427,10 +433,11 @@ public final class SgsGameEngine implements SkillEngine {
     int healed = Math.min(amount, player.maxHp() - player.hp());
     if (healed > 0) {
       player.setHp(player.hp() + healed);
+      state.journal().add(state.journal().seat(player.seat())+"回复"+healed+"点体力，当前体力"+player.hp());
       skills.mythic().healed(player);
     }
     return Math.max(healed, 0);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -451,7 +458,7 @@ public final class SgsGameEngine implements SkillEngine {
     }
     grouped.forEach((zone,cards)->changes.add(new CardMovement.Transfer(cards,zone,CardZone.DISCARD,DISCARD,actor.seat(),true)));
     state.cards().moveBatch(changes);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -462,7 +469,7 @@ public final class SgsGameEngine implements SkillEngine {
     try {
     if(!state.players().contains(recipient))throw new IllegalArgumentException("unknown recipient");
     return state.cards().drawTo(CardZone.hand(recipient.seat()),count,DRAW,recipient.seat(),false);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -471,7 +478,7 @@ public final class SgsGameEngine implements SkillEngine {
     try {
     if(!state.players().contains(recipient))throw new IllegalArgumentException("unknown recipient");
     return recipient.alive()?state.cards().obtainProcessing(recipient,card):0;
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -497,7 +504,7 @@ public final class SgsGameEngine implements SkillEngine {
     checkpointOperations++;
     try {
     return playCard(player, cardInstanceId, target, null);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -511,7 +518,7 @@ public final class SgsGameEngine implements SkillEngine {
     checkpointOperations++;
     try {
     return playCardAs(player, cardInstanceId, null, target, secondaryTarget);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -561,7 +568,7 @@ public final class SgsGameEngine implements SkillEngine {
       settled = ctx.card();
     }
     return dispatch(player, settled, asType, target, secondaryTarget);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -582,15 +589,32 @@ public final class SgsGameEngine implements SkillEngine {
       case WUXIE->ActionResult.rejected(RejectReason.RESPONSE_ONLY);
       case GUOHE,SHUNSHOU,JUEDOU->validateSingleTarget(source,target,type);
       case HUOGONG->FireAttackRule.validate(this,source,target,card);
+      case JIEJIA->ZhuluRules.validateDisarm(this,target);
       case JIEDAO->validateJiedao(source,target,secondary,card);
       case TIESUO->TiesuoRule.validate(state,card,target,secondary);
-      case WUZHONG,TAOYUAN,WUGU,NANMAN,WANJIAN->ActionResult.ok();
+      case ZHULU,WUZHONG,TAOYUAN,WUGU,NANMAN,WANJIAN->ActionResult.ok();
       default->ActionResult.rejected(RejectReason.UNKNOWN_CARD);
     };
     if(!result.accepted())return result;
     if(target!=null && !cardTargetAllowed(source,target,card) || type==CardType.TIESUO && secondary!=null && !cardTargetAllowed(source,secondary,card))
       return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
     return result;
+  }
+
+  /** Public target receipt after validation/payment; never derived from response invitations. */
+  void recordTargetedUse(SgsPlayer source,GameCard card,List<SgsPlayer> targets){
+    if(targets.isEmpty())return;
+    state.beginPublicCardUse(card.sourceCards());
+    state.journal().targetedUse(source.seat(),card,targets.stream().map(SgsPlayer::seat).toList());
+    for(var target:targets)state.tableEffect("CARD_USE",source.seat(),target.seat(),card.type().id(),card.sourceCards(),true);
+  }
+  private void recordTrickUse(SgsPlayer source,GameCard card,SgsPlayer first,SgsPlayer second){
+    List<SgsPlayer> targets;
+    if(card.type()==CardType.WUZHONG)targets=List.of(source);
+    else if(Set.of(CardType.NANMAN,CardType.WANJIAN,CardType.TAOYUAN,CardType.WUGU,CardType.ZHULU).contains(card.type()))
+      targets=state.alivePlayersFromCurrent().stream().filter(p->(p!=source || card.type()!=CardType.NANMAN && card.type()!=CardType.WANJIAN)&&cardTargetAllowed(source,p,card)).toList();
+    else targets=java.util.stream.Stream.of(first,second).filter(java.util.Objects::nonNull).distinct().toList();
+    recordTargetedUse(source,card,targets);
   }
 
   private ActionResult dispatch(
@@ -622,6 +646,7 @@ public final class SgsGameEngine implements SkillEngine {
     var verdict=validateDelayedTrick(source,card,target);if(!verdict.accepted())return verdict;
     var destination=card.type()==CardType.SHANDIAN?source:target;
     beginOwnedUse(source,card,USE);
+    recordTargetedUse(source,card,List.of(destination));
     state.cards().moveBatch(List.of(new CardMovement.Transfer(card.sourceCards(),CardZone.PROCESSING,CardZone.judgment(destination.seat()),DELAYED_USE,source.seat(),true,card.type())));
     state.log("seat {} placed {} on seat {}", source.seat(), card.type().id(), destination.seat());
     return ActionResult.ok();
@@ -698,7 +723,7 @@ public final class SgsGameEngine implements SkillEngine {
       if(state.phase()!=Phase.DRAW) firePhaseEntered();
     }
     return ActionResult.ok();
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -746,7 +771,7 @@ public final class SgsGameEngine implements SkillEngine {
       firePhaseEntered(); // PHASE_PLAY_START
     }
     return ActionResult.ok();
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -810,7 +835,8 @@ public final class SgsGameEngine implements SkillEngine {
       var delayedType=player.delayZone().effectiveType(trick);
       beginCounterspellScope();try{
       state.cards().move(List.of(trick),CardZone.judgment(player.seat()),CardZone.PROCESSING,USE,player.seat());
-      if (isCounteredByWuxie(player)) {
+      if (isCounteredByWuxie(player,delayedType)) {
+        if(delayedType==CardType.SHANDIAN)passLightning(player,trick);
         state.cards().finish(trick,player.seat());
         state.log("seat {}'s {} was negated before judgment", player.seat(), trick.cardId());
         continue;
@@ -819,12 +845,25 @@ public final class SgsGameEngine implements SkillEngine {
       try{applyJudgment(player,trick,judged,delayedType);}finally{state.cards().finish(trick,player.seat());}
       }finally{endCounterspellScope();}
     }
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
 
+  private void passLightning(SgsPlayer player,CardInstance trick){
+    SgsPlayer next=state.alivePlayersAfter(player.seat()).stream()
+        .filter(p->p.delayZone().cards().stream().noneMatch(c->p.delayZone().effectiveType(c)==CardType.SHANDIAN) && cardTargetAllowed(player,p,trick))
+        .findFirst().orElse(player.delayZone().cards().stream().noneMatch(c->player.delayZone().effectiveType(c)==CardType.SHANDIAN) && cardTargetAllowed(player,player,trick)?player:null);
+    state.cards().move(List.of(trick),CardZone.PROCESSING,next==null?CardZone.DISCARD:CardZone.judgment(next.seat()),DELAY_PASS,player.seat());
+    if(next!=null)state.log("lightning passes to seat {}",next.seat());
+  }
+
   private void applyJudgment(SgsPlayer player, CardInstance trick, CardInstance judged,CardType delayedType) {
+    if(judged!=null){var suit=skills.mythic().suit(player,judged);
+      boolean hit=switch(delayedType){case BINGLIANG->suit!=dev.sgs.core.card.Suit.CLUB;case LEBU->suit!=dev.sgs.core.card.Suit.HEART;case SHANDIAN->suit==dev.sgs.core.card.Suit.SPADE&&judged.rank().value()>=2&&judged.rank().value()<=9;default->false;};
+      state.tableEffect("JUDGMENT",player.seat(),player.seat(),delayedType.name(),List.of(judged,trick),hit);
+    }
+
     switch (delayedType) {
       case BINGLIANG -> {
         if(judged!=null && skills.mythic().suit(player,judged)!=dev.sgs.core.card.Suit.CLUB)state.setSkipDrawPhase(true);
@@ -848,10 +887,7 @@ public final class SgsGameEngine implements SkillEngine {
           state.log("lightning struck seat {} for 3", player.seat());
           applyDamage(player,3,null,trick,DamageNature.THUNDER,false);
         } else {
-          SgsPlayer next=state.alivePlayersAfter(player.seat()).stream()
-              .filter(p->p.delayZone().cards().stream().noneMatch(c->c.type()==trick.type())).findFirst().orElse(player);
-          state.cards().move(List.of(trick),CardZone.PROCESSING,CardZone.judgment(next.seat()),DELAY_PASS,player.seat());
-          state.log("lightning passes to seat {}", next.seat());
+          passLightning(player,trick);
         }
       }
       default -> {}
@@ -877,12 +913,15 @@ public final class SgsGameEngine implements SkillEngine {
   private ActionResult playTrick(
       SgsPlayer source, GameCard card, SgsPlayer target, SgsPlayer secondaryTarget) {
     if(target!=null && !cardTargetAllowed(source,target,card))return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
+    if(card.type()==CardType.WUZHONG && !cardTargetAllowed(source,source,card))return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
+    if(card.type()==CardType.ZHULU && state.alivePlayers().stream().noneMatch(p->cardTargetAllowed(source,p,card)))return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
     if(card.type()==CardType.TIESUO)return TiesuoRule.play(this,source,card,target,secondaryTarget);
     ActionResult validation =
         switch (card.type()) {
-          case WUZHONG, TAOYUAN, WUGU, NANMAN, WANJIAN -> ActionResult.ok();
+          case ZHULU, WUZHONG, TAOYUAN, WUGU, NANMAN, WANJIAN -> ActionResult.ok();
           case JUEDOU, GUOHE, SHUNSHOU -> validateSingleTarget(source, target, card.type());
           case HUOGONG -> FireAttackRule.validate(this,source,target,card);
+          case JIEJIA -> ZhuluRules.validateDisarm(this,target);
           case JIEDAO -> validateJiedao(source, target, secondaryTarget,card);
           default -> ActionResult.rejected(RejectReason.UNKNOWN_CARD);
         };
@@ -894,16 +933,19 @@ public final class SgsGameEngine implements SkillEngine {
     beginCounterspellScope();
     try{
     beginOwnedUse(source,card,USE);
+    recordTrickUse(source,card,target,secondaryTarget);
     cardUseCommitted(source,card);
     try{switch (card.type()) {
-      case WUZHONG -> resolveWuzhong(source);
+      case WUZHONG -> {if(cardTargetAllowed(source,source,card))resolveWuzhong(source);}
       case GUOHE -> resolveGuohe(source, target);
       case SHUNSHOU -> resolveShunshou(source, target);
       case JUEDOU -> resolveJuedou(source, target, card);
       case NANMAN -> resolveAoeSha(source, true, card);
       case WANJIAN -> resolveAoeSha(source, false, card);
-      case TAOYUAN -> resolveTaoyuan(source);
-      case WUGU -> resolveWugu(source);
+      case TAOYUAN -> resolveTaoyuan(source,card);
+      case WUGU -> resolveWugu(source,card);
+      case ZHULU -> ZhuluRules.draft(this,source,card);
+      case JIEJIA -> {if(!isCounteredByWuxie(target))ZhuluRules.disarm(this,source.seat(),target.seat());}
       case JIEDAO -> resolveJiedao(source, target, secondaryTarget);
       case HUOGONG -> FireAttackRule.resolve(this,source,target,card);
       default -> throw new IllegalStateException("unhandled trick " + card.type());
@@ -916,6 +958,7 @@ public final class SgsGameEngine implements SkillEngine {
 
   public boolean cardTargetAllowed(SgsPlayer source,SgsPlayer target,GameCard card){
     card=skills.mythic().effectiveCard(source,card);
+    if(ZhuluRules.nightArmorBlocks(target,card))return false;
     return bus.queryInt(RuleId.CARD_TARGET_ALLOWED,SkillContext.cardTarget(state,source,target,card),1)>0;
   }
 
@@ -928,7 +971,7 @@ public final class SgsGameEngine implements SkillEngine {
     return state.players().stream().allMatch(p->{var h=p.hero();return h!=null && (skills.supportsExternalProgrammedCheckpoint(p)
         ||dev.sgs.core.hero.StandardHeroes.CATALOG.stream().anyMatch(c->c.id().equals(h.id())&&c.kingdom()==h.kingdom()&&c.maxHp()==h.maxHp()&&c.male()==h.male()&&c.skillIds().equals(h.skillIds())));});
   }
-  public static boolean resumableTrickType(CardType type){return type!=null && java.util.Set.of(CardType.WUZHONG,CardType.GUOHE,CardType.SHUNSHOU,CardType.TAOYUAN,CardType.WUGU,CardType.NANMAN,CardType.WANJIAN,CardType.JUEDOU,CardType.TIESUO,CardType.HUOGONG,CardType.JIEDAO).contains(type);}
+  public static boolean resumableTrickType(CardType type){return type!=null && java.util.Set.of(CardType.JIEJIA,CardType.ZHULU,CardType.WUZHONG,CardType.GUOHE,CardType.SHUNSHOU,CardType.TAOYUAN,CardType.WUGU,CardType.NANMAN,CardType.WANJIAN,CardType.JUEDOU,CardType.TIESUO,CardType.HUOGONG,CardType.JIEDAO).contains(type);}
   public boolean supportsTrickContinuation(CardType type){
     return supportsTrickContinuation()&&(type!=CardType.JIEDAO||supportsAttackContinuation());
   }
@@ -952,12 +995,15 @@ public final class SgsGameEngine implements SkillEngine {
     if(!supportsTrickContinuation(type))return ActionResult.rejected(RejectReason.NOT_YET_IMPLEMENTED);
     if(type!=CardType.TIESUO && type!=CardType.JIEDAO && secondaryTarget!=null)return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
     if(type==CardType.JIEDAO){var valid=validateJiedao(source,target,secondaryTarget,cost);if(!valid.accepted())return valid;}
+    if(type==CardType.ZHULU && state.alivePlayers().stream().noneMatch(p->cardTargetAllowed(source,p,type==cost.type()?cost:new VirtualCard(type,List.of(cost)))))return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
+    if(type==CardType.JIEJIA){var valid=ZhuluRules.validateDisarm(this,target);if(!valid.accepted())return valid;}
     if(type==CardType.HUOGONG){var valid=FireAttackRule.validate(this,source,target,cost);if(!valid.accepted())return valid;}
     if(type==CardType.TIESUO){
       if(target==null)return ActionResult.rejected(RejectReason.TARGET_REQUIRED);
       var valid=TiesuoRule.validate(state,cost,target,secondaryTarget);if(!valid.accepted())return valid;
       if(secondaryTarget!=null&&!cardTargetAllowed(source,secondaryTarget,cost))return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
     }
+    if(type==CardType.WUZHONG && !cardTargetAllowed(source,source,type==cost.type()?cost:new VirtualCard(type,List.of(cost))))return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
     GameCard used=cost;boolean equipped=CardZone.equipment(source.seat()).equals(state.cards().locate(cardId));
     if(equipped && (type!=CardType.GUOHE || cost.type()==type))return ActionResult.rejected(RejectReason.CARD_NOT_IN_HAND);
     if(target!=null && !cardTargetAllowed(source,target,type==cost.type()?cost:new VirtualCard(type,List.of(cost))))return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
@@ -968,7 +1014,7 @@ public final class SgsGameEngine implements SkillEngine {
     }
     checkpointOperations++;
     try{var selected=type==CardType.TIESUO?state.alivePlayersFromCurrent().stream().filter(p->p==target||p==secondaryTarget).map(SgsPlayer::seat).toList():null;
-      activeTrick=new TrickContinuation(this,source.seat(),type==CardType.GUOHE||type==CardType.SHUNSHOU||type==CardType.JUEDOU||type==CardType.HUOGONG||type==CardType.JIEDAO?target.seat():source.seat(),cardId,type,selected);if(type==CardType.JIEDAO)activeTrick.attachStrike(target.seat(),secondaryTarget.seat());beginOwnedUse(source,used,USE);return ActionResult.ok();}
+      activeTrick=new TrickContinuation(this,source.seat(),type==CardType.JIEJIA||type==CardType.GUOHE||type==CardType.SHUNSHOU||type==CardType.JUEDOU||type==CardType.HUOGONG||type==CardType.JIEDAO?target.seat():source.seat(),cardId,type,selected);if(type==CardType.JIEDAO)activeTrick.attachStrike(target.seat(),secondaryTarget.seat());beginOwnedUse(source,used,USE);recordTrickUse(source,used,target,secondaryTarget);return ActionResult.ok();}
     catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}finally{checkpointOperations--;}
   }
   public void pollResumableTrick(){
@@ -1081,7 +1127,8 @@ public final class SgsGameEngine implements SkillEngine {
     if(CardZone.PROCESSING.equals(location))ids.add(c.cardId());
     else if(!java.util.Set.of(CardType.NANMAN,CardType.WANJIAN,CardType.JUEDOU,CardType.HUOGONG).contains(c.effectiveType()) || location.kind()!=CardZone.Kind.HAND || !state.players().get(location.seat()).hero().skillIds().contains("jianxiong"))throw new IllegalArgumentException("primary trick cost missing");
     for(var cost:c.counters())if(!ids.add(cost.cardId()))throw new IllegalArgumentException("aliased counter cost");
-    for(long id:c.family().harvest())if(id==c.cardId() || !ids.add(id))throw new IllegalArgumentException("aliased harvest cost");
+    for(long id:c.family().harvest()){if(id==c.cardId() || !ids.add(id))throw new IllegalArgumentException("aliased harvest cost");
+      if(c.effectiveType()==CardType.ZHULU && processing.stream().noneMatch(card->card.instanceId()==id && card.type().isEquipment()))throw new IllegalArgumentException("non-equipment zhulu draft");}
     if(c.family().response()!=null && c.family().response().judgmentCard()!=0 && !ids.add(c.family().response().judgmentCard()))throw new IllegalArgumentException("aliased judgment cost");
     if(c.family().ganglie()!=null&&c.family().ganglie().judgment()!=null&&!ids.add(c.family().ganglie().judgment().effective()))throw new IllegalArgumentException("aliased ganglie judgment");
     if(c.family().strike()!=null)ids.addAll(dev.sgs.core.persistence.StrikeFrames.processing(c.family().strike(),state));
@@ -1226,16 +1273,68 @@ public final class SgsGameEngine implements SkillEngine {
 
   /** Owner-only UI hints for physical single-target tricks. Reuses actual target validators;
    * unsupported cards/view-as actions deliberately have no hint instead of a guessed verdict. */
+  public java.util.Map<Integer,String> redirectSelectionTargets(PromptRequest prompt,List<Long> costs){
+    var result=new java.util.LinkedHashMap<Integer,String>();
+    var cost=costs.size()==1?prompt.choices().stream().filter(c->c.instanceId()==costs.getFirst()).findFirst().orElse(null):null;
+    for(var p:state.players())result.put(p.seat(),cost!=null && prompt.allowedTargetSeats().contains(p.seat()) && validAttackRangeAfterCost(prompt.asker(),p,cost)?"":"TARGET_PROHIBITED");
+    return java.util.Map.copyOf(result);
+  }
+  /** Pure, context-specific preview, evaluated only on the owning game worker. */
+  public java.util.Map<Integer,String> selectionTargets(SgsPlayer actor,String skill,List<Long> costs,int declared,int primary){
+    var result=new java.util.LinkedHashMap<Integer,String>();
+    for(var candidate:state.players()){
+      String reason="TARGET_PROHIBITED";
+      if(!skill.isEmpty()){
+        var request=validateActiveSkillRequest(actor,skill,candidate,costs);
+        if(request.verdict().accepted()){
+          var meta=dev.sgs.core.addon.AddonRuntime.current().skill(skill).orElse(null);
+          if(meta!=null && meta.target()!=dev.sgs.core.addon.SkillPresentation.Target.NONE){
+            var verdict=request.skill().preview(this,actor,candidate,request.cards());reason=verdict.accepted()?"":verdict.reason();
+          }
+        }
+      }else if(actor==state.currentPlayer() && state.phase()==Phase.PLAY && !hasActiveContinuation() && costs.size()==1 && declared>=0 && declared<CardType.values().length){
+        var card=findOwnedCost(actor,costs.getFirst());var type=CardType.values()[declared];
+        if(card!=null && (card.type()==type || bus.canTransform(SkillContext.transform(state,actor,card,type,null)))){
+          var first=primary>=0 && primary<state.players().size()?state.players().get(primary):null;
+          boolean targeted=Set.of(CardType.SHA,CardType.HUOSHA,CardType.LEISHA,CardType.LEBU,CardType.BINGLIANG,CardType.JUEDOU,CardType.GUOHE,CardType.SHUNSHOU,CardType.HUOGONG,CardType.JIEJIA,CardType.JIEDAO,CardType.TIESUO).contains(type);
+          if(targeted){
+            ActionResult verdict;
+            if(type==CardType.JIEDAO && (first==null || first==candidate)){
+              verdict=ActionResult.rejected(RejectReason.TARGET_NO_WEAPON);
+              for(var second:state.players()){var v=validateTransformPlay(actor,card,type,candidate,second);if(v.accepted()){verdict=v;break;} }
+            }else verdict=validateTransformPlay(actor,card,type,first==null?candidate:first,first==null || first==candidate?null:candidate);
+            reason=verdict.accepted()?"":verdict.reason().name();
+          }
+        }
+      }
+      result.put(candidate.seat(),reason);
+    }
+    if(!skill.isEmpty()){
+      var request=validateActiveSkillRequest(actor,skill,null,costs);
+      if(request.verdict().accepted()){
+        var meta=dev.sgs.core.addon.AddonRuntime.current().skill(skill).orElse(null);
+        if(meta!=null && meta.target()==dev.sgs.core.addon.SkillPresentation.Target.NONE){var v=request.skill().preview(this,actor,null,request.cards());result.put(-1,v.accepted()?"":v.reason());}
+      }
+    }
+    return java.util.Map.copyOf(result);
+  }
+
   public java.util.Map<Long,java.util.Map<Integer,String>> singleTrickTargetAvailability(SgsPlayer source){
     if(source==null || !state.players().contains(source) || !source.alive() || source!=state.currentPlayer()
         || state.status()!=GameStatus.RUNNING || state.phase()!=Phase.PLAY || hasActiveContinuation()
         || checkpointOperations!=0 || !state.cards().cards(CardZone.PROCESSING).isEmpty())return java.util.Map.of();
     var hints=new java.util.LinkedHashMap<Long,java.util.Map<Integer,String>>();
     for(var card:source.handView()){
-      if(card.type()!=CardType.SHUNSHOU && card.type()!=CardType.GUOHE && card.type()!=CardType.JUEDOU)continue;
+      if(!java.util.Set.of(CardType.JIEJIA,CardType.SHUNSHOU,CardType.GUOHE,CardType.JUEDOU,CardType.LEBU,CardType.BINGLIANG,CardType.SHA,CardType.HUOSHA,CardType.LEISHA,CardType.HUOGONG).contains(card.type()))continue;
       var targets=new java.util.LinkedHashMap<Integer,String>();
       for(var target:state.players()){
-        var verdict=validateSingleTarget(source,target,card.type());
+        var verdict=switch(card.type()){
+          case LEBU,BINGLIANG->validateDelayedTrick(source,card,target);
+          case SHA,HUOSHA,LEISHA->validateSha(source,target);
+          case HUOGONG->FireAttackRule.validate(this,source,target,card);
+          case JIEJIA->ZhuluRules.validateDisarm(this,target);
+          default->validateSingleTarget(source,target,card.type());
+        };
         if(verdict.accepted() && !cardTargetAllowed(source,target,card))verdict=ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
         targets.put(target.seat(),verdict.accepted()?"":verdict.reason().name());
       }
@@ -1302,11 +1401,13 @@ public final class SgsGameEngine implements SkillEngine {
       var quota=shaUsageAvailability(source);if(!quota.accepted())return quota;
       return anyCardTarget(source,card,physical);
     }
+    if(declared==CardType.WUZHONG && !cardTargetAllowed(source,source,card))return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
+    if(declared==CardType.ZHULU && state.alivePlayers().stream().noneMatch(p->cardTargetAllowed(source,p,card)))return ActionResult.rejected(RejectReason.TARGET_PROHIBITED);
     if(declared==CardType.SHANDIAN)return validateDelayedTrick(source,card,source);
-    if(declared==CardType.LEBU || declared==CardType.BINGLIANG || declared==CardType.GUOHE
+    if(declared==CardType.JIEJIA || declared==CardType.LEBU || declared==CardType.BINGLIANG || declared==CardType.GUOHE
         || declared==CardType.SHUNSHOU || declared==CardType.JUEDOU || declared==CardType.HUOGONG || declared==CardType.JIEDAO)
       return anyCardTarget(source,card,physical);
-    if(declared==CardType.TIESUO || declared==CardType.WUZHONG || declared==CardType.TAOYUAN
+    if(declared==CardType.ZHULU || declared==CardType.TIESUO || declared==CardType.WUZHONG || declared==CardType.TAOYUAN
         || declared==CardType.WUGU || declared==CardType.NANMAN || declared==CardType.WANJIAN)return ActionResult.ok();
     return ActionResult.rejected(RejectReason.UNKNOWN_CARD);
   }
@@ -1319,6 +1420,7 @@ public final class SgsGameEngine implements SkillEngine {
         case SHA,HUOSHA,LEISHA->verdict=validateShaCost(source,target,physical);
         case LEBU,BINGLIANG->verdict=validateDelayedTrick(source,card,target);
         case HUOGONG->verdict=FireAttackRule.validate(this,source,target,card);
+        case JIEJIA->verdict=ZhuluRules.validateDisarm(this,target);
         case JIEDAO->{
           verdict=ActionResult.rejected(RejectReason.TARGET_REQUIRED);
           for(var victim:state.players()){
@@ -1363,7 +1465,7 @@ public final class SgsGameEngine implements SkillEngine {
 
   /** Something from Nothing: draw 2 unless negated. */
   private void resolveWuzhong(SgsPlayer source) {
-    if (isCounteredByWuxie(source)) {
+    if (isCounteredByWuxie(source,CardType.WUZHONG)) {
       return;
     }
     List<CardInstance> drawn=drawCards(source,2);
@@ -1372,7 +1474,7 @@ public final class SgsGameEngine implements SkillEngine {
 
   /** Dismantle: operator-private selection, with anonymous hand-position tokens. */
   private void resolveGuohe(SgsPlayer source, SgsPlayer target) {
-    if (isCounteredByWuxie(target)) {
+    if (isCounteredByWuxie(target,CardType.GUOHE)) {
       return;
     }
     CardInstance taken=chooseTargetZoneCard(source,target,"guohe");
@@ -1384,7 +1486,7 @@ public final class SgsGameEngine implements SkillEngine {
 
   /** Snatch: the operator chooses a target zone/card without learning hidden hand identities. */
   private void resolveShunshou(SgsPlayer source, SgsPlayer target) {
-    if (isCounteredByWuxie(target)) {
+    if (isCounteredByWuxie(target,CardType.SHUNSHOU)) {
       return;
     }
     CardInstance taken=chooseTargetZoneCard(source,target,"shunshou");
@@ -1416,7 +1518,7 @@ public final class SgsGameEngine implements SkillEngine {
   /** Duel: participants alternate playing Sha; the first one without an answer takes 1 damage. */
   private void resolveJuedou(SgsPlayer source, SgsPlayer target, GameCard juedouCard) {
     bus.trigger(Timing.CARD_TARGET_CONFIRMED,SkillContext.cardTarget(state,source,target,juedouCard).at(Timing.CARD_TARGET_CONFIRMED));
-    if (isCounteredByWuxie(target)) {
+    if (isCounteredByWuxie(target,CardType.JUEDOU)) {
       return;
     }
     resolveUncounterableDuel(source,target,juedouCard);
@@ -1428,6 +1530,7 @@ public final class SgsGameEngine implements SkillEngine {
   }
   @Override public void useSkillDuel(SgsPlayer source,SgsPlayer target){
     if(!canSkillDuel(source,target))throw new IllegalArgumentException("illegal virtual duel");
+    recordTargetedUse(source,new VirtualCard(CardType.JUEDOU,List.of()),List.of(target));
     resolveUncounterableDuel(source,target,new dev.sgs.core.card.VirtualCard(CardType.JUEDOU,List.of()));
   }
   private void resolveUncounterableDuel(SgsPlayer source,SgsPlayer target,GameCard juedouCard){
@@ -1469,7 +1572,7 @@ public final class SgsGameEngine implements SkillEngine {
       if(target.equipment().armor()!=null && target.equipment().armor().type()==CardType.TENGJIA){
         state.log("seat {} tengjia nullifies aoe",target.seat());continue;
       }
-      if (isCounteredByWuxie(target)) {
+      if (isCounteredByWuxie(target,nanman?CardType.NANMAN:CardType.WANJIAN)) {
         continue;
       }
       if(!nanman){
@@ -1498,9 +1601,9 @@ public final class SgsGameEngine implements SkillEngine {
   }
 
   /** Peach Garden: every alive player heals 1 unless negated individually. */
-  private void resolveTaoyuan(SgsPlayer source) {
+  private void resolveTaoyuan(SgsPlayer source,GameCard cause) {
     for (SgsPlayer target : state.alivePlayersFromSeat(source.seat())) {
-      if (isCounteredByWuxie(target)) {
+      if (!cardTargetAllowed(source,target,cause) || isCounteredByWuxie(target,CardType.TAOYUAN)) {
         continue;
       }
       if (target.hp() < target.maxHp()) {
@@ -1511,13 +1614,15 @@ public final class SgsGameEngine implements SkillEngine {
   }
 
   /** Harvest: reveal one card per alive player; in ring order each picks one, rest is discarded. */
-  private void resolveWugu(SgsPlayer source) {
+  private void resolveWugu(SgsPlayer source,GameCard cause) {
     List<CardInstance> pool=new ArrayList<>(state.cards().drawTo(CardZone.PROCESSING,state.alivePlayers().size(),REVEAL,source.seat(),true));
+    state.beginDraft(state.cards().checkpointSequence(),source.seat(),"五谷丰登",pool);
     for (SgsPlayer picker : state.alivePlayersFromSeat(source.seat())) {
+      state.draftPicker(picker.seat());
       if (pool.isEmpty()) {
         break;
       }
-      if (isCounteredByWuxie(picker)) {
+      if (!cardTargetAllowed(source,picker,cause) || isCounteredByWuxie(picker,CardType.WUGU)) {
         continue;
       }
       PromptRequest prompt =
@@ -1539,16 +1644,17 @@ public final class SgsGameEngine implements SkillEngine {
       }
       pool.removeIf(c -> c.instanceId() == picked.instanceId());
       state.cards().move(List.of(picked),CardZone.PROCESSING,CardZone.hand(picker.seat()),EFFECT_GAIN,picker.seat());
+      state.claimDraft(picked.instanceId(),picker.seat());
       state.log("seat {} picked {} from wugu", picker.seat(), picked.cardId());
     }
     var remaining=pool.stream().filter(c->CardZone.PROCESSING.equals(state.cards().locate(c.instanceId()))).toList();
-    state.cards().move(remaining,CardZone.PROCESSING,CardZone.DISCARD,FINISH,source.seat());
+    state.cards().move(remaining,CardZone.PROCESSING,CardZone.DISCARD,FINISH,source.seat());state.finishDraft();
   }
 
   /** Borrow Sword: the weapon holder attacks the victim, or hands the weapon to the source. */
   private void resolveJiedao(SgsPlayer source,SgsPlayer holder,SgsPlayer victim){
     if(legacyAttackOracle||skills.mythic().active()){resolveJiedaoLegacy(source,holder,victim);return;}
-    if(isCounteredByWuxie(holder))return;
+    if(isCounteredByWuxie(holder,CardType.JIEDAO))return;
     if(!victim.alive()||!cardTargetAllowed(holder,victim,new VirtualCard(CardType.SHA,List.of()))){transferBorrowedWeapon(source,holder);return;}
     var program=runAttackSupply(holder,victim,PromptType.JIEDAO_RESPONSE,true,true);
     if(program.snapshot().receipt()==null){transferBorrowedWeapon(source,holder);return;}
@@ -1596,7 +1702,7 @@ public final class SgsGameEngine implements SkillEngine {
     boolean old=legacyAttackOracle;legacyAttackOracle=true;try{return useActiveSkill(actor,skill,target,costs);}finally{legacyAttackOracle=old;}
   }
   private void resolveJiedaoLegacy(SgsPlayer source, SgsPlayer holder, SgsPlayer victim) {
-    if (isCounteredByWuxie(holder)) {
+    if (isCounteredByWuxie(holder,CardType.JIEDAO)) {
       return;
     }
     if(!victim.alive() || !cardTargetAllowed(holder,victim,new dev.sgs.core.card.VirtualCard(CardType.SHA,List.of()))){
@@ -1638,6 +1744,9 @@ public final class SgsGameEngine implements SkillEngine {
    * a Negation. An odd number of Negations cancels the effect.
    */
   boolean isCounteredByWuxie(SgsPlayer effectTarget) {
+    return isCounteredByWuxie(effectTarget,null);
+  }
+  boolean isCounteredByWuxie(SgsPlayer effectTarget,CardType effectType) {
     checkpointOperations++;
     boolean localScope=counterspellScopes.isEmpty();if(localScope)beginCounterspellScope();
     try {
@@ -1667,7 +1776,7 @@ public final class SgsGameEngine implements SkillEngine {
         if(hasCounterspellResponse(question))requests.add(question);
       }
       if(requests.isEmpty())break;
-      var window=new CounterspellWindow(windowId,effectTarget.seat(),counters,deadline,requests,clock::nowMillis,this::validateContinuationDecision);
+      var window=new CounterspellWindow(windowId,effectTarget.seat(),counters,deadline,requests,clock::nowMillis,this::validateContinuationDecision).withEffect(effectType);
       CounterspellResult result=responder.collectCounterspell(state,window);
       // A result is authoritative only if it came from this worker's validated window.
       var authoritative=window.finish();
@@ -1688,7 +1797,7 @@ public final class SgsGameEngine implements SkillEngine {
         state.cards().finish(pending.get(i).card(), users.get(i).seat());
       }
     }
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{if(localScope)endCounterspellScope();checkpointOperations--;}
   }
@@ -1742,6 +1851,7 @@ public final class SgsGameEngine implements SkillEngine {
   }
 
   private ActionResult commitProcessedAttack(SgsPlayer source,GameCard sha,SgsPlayer target){
+    recordTargetedUse(source,sha,List.of(target));
     state.registerShaPlayed();
     cardUseCommitted(source,sha);
 
@@ -1922,6 +2032,7 @@ public final class SgsGameEngine implements SkillEngine {
   }
   boolean trickCompleteJudgment(int seat,long cause,long id,boolean accepted){
     if(id==0)return false;var target=state.players().get(seat);var card=trickPhysical(id);boolean red=card.isRed();
+    if(cause!=0&&trickPhysical(cause).type()==CardType.BAGUA)state.tableEffect("JUDGMENT",seat,seat,"BAGUA",List.of(card,trickPhysical(cause)),red);
     var context=SkillContext.judge(state,target,cause==0?null:trickPhysical(cause),card).at(Timing.JUDGE_CARD_EFFECT);
     if(deferredInvoke!=null)throw new IllegalStateException("nested judgment invocation");
     var input=trickTianduApplies(seat,cause,id)?new DeferredInvoke(seat,seat,"tiandu",accepted):null;deferredInvoke=input;
@@ -2024,7 +2135,7 @@ public final class SgsGameEngine implements SkillEngine {
         card=transform.card();
       }
       if(yielded){activeAttack=AttackContinuation.ordinaryUse(this,source.seat(),ordered.stream().map(SgsPlayer::seat).toList(),card);advanceAttack();return ActionResult.ok();}
-      beginOwnedUse(source,card,USE);state.registerShaPlayed();cardUseCommitted(source,card);
+      beginOwnedUse(source,card,USE);recordTargetedUse(source,card,ordered);state.registerShaPlayed();cardUseCommitted(source,card);
       int damage=state.consumeJiuBoost()?2:1;
       if(ordered.size()>1){state.publishSkillActivation(source.seat(),"fangtian");state.log("seat {} fangtian targets {}",source.seat(),ordered.stream().map(SgsPlayer::seat).toList());}
       {
@@ -2577,7 +2688,7 @@ public final class SgsGameEngine implements SkillEngine {
     state.log(
         "seat {} was hit by {}sha from seat {} for {}", target.seat(), element, source.seat(), damage);
     applyDamage(target, damage, source, shaCard);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -2643,6 +2754,8 @@ public final class SgsGameEngine implements SkillEngine {
       bus.trigger(Timing.JUDGE_CARD_MODIFY,context,OrderStrategy.MULTI_ENTITY_ORDER);
       var effective=context.judgeCard();
       if(effective!=null)eventListeners().forEach(l->l.onJudgmentFinalized(target,effective));
+      if(effective!=null&&cause!=null&&cause.type()==CardType.BAGUA){var suit=skills.mythic().suit(target,effective);state.tableEffect("JUDGMENT",target.seat(),target.seat(),"BAGUA",List.of(effective,cause),suit==dev.sgs.core.card.Suit.HEART||suit==dev.sgs.core.card.Suit.DIAMOND);}
+
       context=context.at(Timing.JUDGE_CARD_EFFECT);bus.trigger(Timing.JUDGE_CARD_EFFECT,context);
       if(obtainBlack && context.judgeCard()!=null && context.judgeCard().isBlack() && target.alive()
           && CardZone.PROCESSING.equals(state.cards().locate(context.judgeCard().instanceId())))
@@ -2692,10 +2805,12 @@ public final class SgsGameEngine implements SkillEngine {
     checkpointOperations++;
     try {
     applyDamage(target,amount,source,causeCard,DamageNature.of(causeCard),false);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
+
+  void continuationReleaseChain(int seat){state.setChained(seat,false);eventListeners().forEach(l->l.onChainReleased(state.players().get(seat)));}
 
   void applyDamage(SgsPlayer target,int amount,SgsPlayer source,GameCard causeCard,DamageNature nature,boolean chainDamage) {
     applyDamage(target,amount,source,causeCard,nature,chainDamage,false);
@@ -2713,7 +2828,7 @@ public final class SgsGameEngine implements SkillEngine {
       stack.push(new DyingTask(seatOf(target), seatOf(source)));
     }
     stack.drain(this);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -2737,6 +2852,7 @@ public final class SgsGameEngine implements SkillEngine {
     boolean wasChained=state.chained(target.seat());
 
     target.setHp(target.hp() - finalAmount);
+    if(source!=null)state.recordDamage(source.seat(),finalAmount);
     eventListeners().forEach(l -> l.onDamageApplied(target,source,finalAmount,finalNature,chainDamage));
     state.log("seat {} took {} damage (hp {}) nature={} chain={} source={}",target.seat(),finalAmount,target.hp(),finalNature,chainDamage,seatOf(source));
 
@@ -2748,7 +2864,7 @@ public final class SgsGameEngine implements SkillEngine {
     checkpointOperations++;
     try {
     applyDamage(target, amount, source, null);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -2780,7 +2896,7 @@ public final class SgsGameEngine implements SkillEngine {
     stack.push(new HpLossAfterTask(target.seat(),amount));
     if(target.hp()<1)stack.push(new DyingTask(target.seat(),-1));
     stack.drain(this);
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -2931,7 +3047,7 @@ public final class SgsGameEngine implements SkillEngine {
       engine.fireAfterDamage(
           engine.playerBySeat(targetSeat),engine.playerBySeat(sourceSeat),amount,causeCard,nature,chainDamage,damageDistance,transfer);
       if(!nature.elemental() || !wasChained || engine.state.status()!=GameStatus.RUNNING)return;
-      engine.state.setChained(targetSeat,false);
+      engine.continuationReleaseChain(targetSeat);
       if(!chainDamage) {
         var ring=engine.state.alivePlayersFromCurrent();
         for(int i=ring.size()-1;i>=0;i--)engine.stack.push(new ChainDamageTask(ring.get(i).seat(),sourceSeat,amount,causeCard,nature));
@@ -3068,7 +3184,11 @@ public final class SgsGameEngine implements SkillEngine {
     if(p==null||p.id()!=id||p.revision()!=revision||p.type()!=type||!state.players().get(p.asker()).id().equals(actor))return ActionResult.rejected(RejectReason.WRONG_PHASE);
     if(choice.isPresent()){
       var request=activeTurnStart.request(this);var answer=choice.get();
-      if(!(request.allowsHiddenChoice(answer.cardId())||request.choices().stream().anyMatch(c->c.instanceId()==answer.cardId()))
+      if(answer.deckOrder()!=null){
+        if(p.type()!=PromptType.GUANXING_ORDER||!answer.deckOrder().matches(request.choices().stream().map(CardInstance::instanceId).toList()))return ActionResult.rejected(RejectReason.TARGET_NOT_IN_GAME);
+      }else if(p.type()==PromptType.TUXI_TARGET){
+        if(!answer.validTuxi(request.allowedTargetSeats()))return ActionResult.rejected(RejectReason.TARGET_NOT_IN_GAME);
+      }else if(!answer.targetSeats().isEmpty() || !(request.allowsHiddenChoice(answer.cardId())||request.choices().stream().anyMatch(c->c.instanceId()==answer.cardId()))
           ||(request.allowedTargetSeats().isEmpty()?answer.targetSeat()!=-1:!request.allowedTargetSeats().contains(answer.targetSeat())))return ActionResult.rejected(RejectReason.TARGET_NOT_IN_GAME);
     }
     checkpointOperations++;
@@ -3113,7 +3233,7 @@ public final class SgsGameEngine implements SkillEngine {
     var ids=supplied==null?List.<Long>of():supplied;var cards=new ArrayList<CardInstance>();
     if(!endPlay){
       int excess=Math.max(player.handCount()-state.handLimit(player),0);
-      if(ids.size()!=excess||new HashSet<>(ids).size()!=ids.size())return ActionResult.rejected(RejectReason.DISCARD_COUNT);
+      if(ids.size()>excess || excess>0 && ids.isEmpty() || new HashSet<>(ids).size()!=ids.size())return ActionResult.rejected(RejectReason.DISCARD_COUNT);
       for(Long id:ids){if(id==null)return ActionResult.rejected(RejectReason.CARD_NOT_IN_HAND);var card=findInHand(player,id);
         if(card==null)return ActionResult.rejected(RejectReason.CARD_NOT_IN_HAND);cards.add(card);}
     }
@@ -3167,7 +3287,7 @@ public final class SgsGameEngine implements SkillEngine {
     }
     enterDiscardWindow(player);
     return ActionResult.ok();
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -3179,7 +3299,13 @@ public final class SgsGameEngine implements SkillEngine {
     state.advancePhase(); // PLAY -> DISCARD
     if(before.phaseSkipped()){
       state.advancePhase();firePhaseEntered();if(state.status()==GameStatus.RUNNING)state.advancePhase();
-    }else firePhaseEntered();
+    }else {
+      firePhaseEntered();
+      if(state.status()==GameStatus.RUNNING && state.currentPlayer()==player && state.phase()==Phase.DISCARD
+          && player.handCount()<=state.handLimit(player)){
+        state.advancePhase();firePhaseEntered();if(state.status()==GameStatus.RUNNING)state.advancePhase();
+      }
+    }
   }
 
   /**
@@ -3367,12 +3493,12 @@ public final class SgsGameEngine implements SkillEngine {
     }
     if(!"jijiang".equals(skillId))state.publishSkillActivation(player.seat(),skillId);
     return ActionResult.ok();
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
 
-  /** Confirms the exact excess cards to discard, then ends the turn. */
+  /** Accept a nonempty batch up to the excess; only a completed discard hands over the turn. */
   public ActionResult confirmDiscard(SgsPlayer player, List<Long> cardInstanceIds) {
     checkpointOperations++;
     try {
@@ -3388,18 +3514,19 @@ public final class SgsGameEngine implements SkillEngine {
     }
     int excess = Math.max(player.handCount() - state.handLimit(player), 0);
     List<Long> ids = cardInstanceIds == null ? List.of() : cardInstanceIds;
-    if (ids.size() != excess || ids.stream().distinct().count() != ids.size()) {
+    if (ids.size() > excess || excess>0 && ids.isEmpty() || ids.stream().distinct().count() != ids.size()) {
       return ActionResult.rejected(RejectReason.DISCARD_COUNT);
     }
     List<CardInstance> discarded=new ArrayList<>(excess);
     for(long id:ids){var card=findInHand(player,id);if(card==null)return ActionResult.rejected(RejectReason.CARD_NOT_IN_HAND);discarded.add(card);}
     state.cards().move(discarded,CardZone.hand(player.seat()),CardZone.DISCARD,DISCARD,player.seat());
     state.log("seat {} discarded {} confirmed cards", player.seat(), discarded.size());
+    if(player.handCount()>state.handLimit(player))return ActionResult.ok();
     state.advancePhase(); // DISCARD -> END
     firePhaseEntered(); // PHASE_TURN_END
     if(state.status()==GameStatus.RUNNING)state.advancePhase(); // END -> next seat PREPARE
     return ActionResult.ok();
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -3427,7 +3554,7 @@ public final class SgsGameEngine implements SkillEngine {
     firePhaseEntered(); // PHASE_TURN_END
     if(state.status()==GameStatus.RUNNING)state.advancePhase(); // END -> next seat PREPARE
     return ActionResult.ok();
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }
@@ -3559,6 +3686,7 @@ public final class SgsGameEngine implements SkillEngine {
     finishOwnedUse(player,card,reason,"");
   }
   void finishOwnedUse(SgsPlayer player,GameCard card,CardMove.Reason reason,String transformSkill){
+    if(reason==RESPONSE && card.isVirtual())state.journal().add(state.journal().seat(player.seat())+"将上述牌当作"+dev.sgs.core.game.MatchJournal.type(card.type())+"打出");
     if(transformSkill.isEmpty())bus.commitTransform(state,player,card);else bus.commitTransformReceipt(state,player,transformSkill);
     if(card.type()==CardType.SHA && card.isVirtual() && card.sourceCards().size()==2
         && player.equipment().weapon()!=null && player.equipment().weapon().type()==CardType.ZHANGBA)
@@ -3608,12 +3736,13 @@ public final class SgsGameEngine implements SkillEngine {
   void cardUseCommitted(SgsPlayer actor,GameCard card){
     checkpointOperations++;
     try {
+    if(card.isVirtual())state.journal().add(state.journal().seat(actor.seat())+(card.sourceCards().isEmpty()?"使用了":"将上述牌当作")+dev.sgs.core.game.MatchJournal.type(card.type())+(card.sourceCards().isEmpty()?"":"使用"));
     bus.trigger(Timing.CARD_USE_COMMITTED,SkillContext.cardUse(state,actor,card));
     if(EquipmentDamageRules.attack(card) && state.currentPlayer()==actor && state.phase()==Phase.PLAY
         && state.shaPlayedThisTurn()>1 && actor.equipment().weapon()!=null
         && !state.hasSkill(actor,"paoxiao")
         && actor.equipment().weapon().type()==CardType.ZHUGE_NU)state.publishSkillActivation(actor.seat(),"zhuge_nu");
-
+  
     } catch(RuntimeException|Error failure){checkpointFaulted=true;throw failure;}
     finally{checkpointOperations--;}
   }

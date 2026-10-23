@@ -63,10 +63,13 @@ public final class TurnEndContinuation {
                 case BEFORE_DISCARD->{if(!dispatch(e))return;step=Step.ENTER_DISCARD;}
                 case ENTER_DISCARD->{e.state().advancePhase();
                     if(skipped){e.state().advancePhase();step=Step.DISCARD_END;}else step=Step.DISCARD_START;}
-                case DISCARD_START->{if(!dispatch(e))return;step=Step.DONE;return;}
+                case DISCARD_START->{if(!dispatch(e))return;
+                    if(e.state().currentPlayer().handCount()>e.state().handLimit(e.state().currentPlayer())){step=Step.DONE;return;}
+                    e.state().advancePhase();step=Step.DISCARD_END;}
                 case PAYMENT->{if(payment!=null){payment.advance(e);if(!payment.done())return;payment=null;}
                     if(!automaticDiscard)e.state().log("seat {} discarded {} confirmed cards",actor,discarded.size());
                     else if(!discarded.isEmpty())e.state().log("seat {} auto-discarded {} cards",actor,discarded.size());
+                    if(e.state().currentPlayer().handCount()>e.state().handLimit(e.state().currentPlayer())){step=Step.DONE;return;}
                     e.state().advancePhase();step=Step.DISCARD_END;}
                 case DISCARD_END->{if(!dispatch(e))return;step=Step.TURN_END;}
                 case TURN_END->{if(!dispatch(e))return;step=Step.HANDOVER;}
