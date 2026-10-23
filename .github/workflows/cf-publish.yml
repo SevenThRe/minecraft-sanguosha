@@ -1,0 +1,28 @@
+name: Publish SanGuoSha files to CurseForge
+on:
+  workflow_dispatch:
+    inputs:
+      staging_tag:
+        description: Draft release containing the prepared JAR files and upload manifest
+        required: true
+permissions:
+  contents: read
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download prepared artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_TAG: ${{ inputs.staging_tag }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/cf-upload"
+          gh release download "$STAGING_TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/cf-upload"
+      - name: Upload verified JARs to CurseForge
+        env:
+          CURSEFORGE_API_TOKEN: ${{ secrets.SGS_CURSEFORGE_UPLOAD_TOKEN }}
+        run: |
+          python -m pip install --disable-pip-version-check requests
+          cd "$RUNNER_TEMP/cf-upload"
+          python cf_cloud_upload.py
