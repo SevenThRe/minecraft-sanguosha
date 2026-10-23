@@ -3,9 +3,11 @@
   "id": "sgs",
   "version": "${version}",
   "name": "Minecraft-SanGuoSha",
+  "icon": "pack.png",
   "description": "在 Minecraft 中游玩三国杀：房间联机、身份模式与 2v2。社区公开测试版。",
   "environment": "*",
-  "license": "All Rights Reserved",
+  "license": "GPL-3.0-only",
+  "contact": { "sources": "https://github.com/SevenThRe/minecraft-sanguosha", "issues": "https://github.com/SevenThRe/minecraft-sanguosha/issues" },
   "entrypoints": {
     "main": [
       "dev.sgs.validation.fabric.FabricProbe"

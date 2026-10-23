@@ -21,3 +21,11 @@ subprojects {
     tasks.withType(ProcessResources).configureEach { filteringCharset = 'UTF-8' }
 }
 tasks.named('build') { dependsOn ':common:build', ':fabric:build', ':forge:build', ':neoforge:build', 'check' }
+
+subprojects {
+    tasks.withType(Jar).configureEach {
+        from(rootProject.file('../LICENSE')) { into 'META-INF' }
+        from(rootProject.file('../LICENSING.md')) { into 'META-INF' }
+        from(rootProject.file('../THIRD_PARTY_NOTICES.md')) { into 'META-INF' }
+    }
+}
